@@ -16,12 +16,12 @@ jobs:
           python-version: '3.11'
           
       - name: Install dependencies
-        # This installs the myst engine
-        run: pip install "jupyter-book>=2.0.0"
+        # FIX: Install the engine directly so we get the 'myst' command
+        run: pip install mystmd
         
       - name: Build and Fix Styles
         run: |
-          # Use the native command, without the dot argument
+          # Now this command will be found
           myst build --html
           
           # Force the styling fix
