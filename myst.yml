@@ -9,6 +9,11 @@ project:
     - title: Lecture Notes
       children:
         - file: notes/01_intro.md
+
+    # Part 2: Hands-on
+    - title: Tutorials
+      children:
+        - file: tutorials/01_access_setup.md
   # 2. Ignore Rule: This prevents it from looking in venv ever again
   exclude:
     - venv
