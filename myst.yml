@@ -19,6 +19,7 @@ project:
     - venv
     - '**/venv'
     - _build
+    - instructions.txt
 
 site:
   template: book-theme

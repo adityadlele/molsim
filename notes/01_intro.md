@@ -26,7 +26,7 @@ Two major trends are converging to make this a golden age for molecular simulati
 1.  **The Breakdown of Empirical Laws:** As we engineer devices at the nanoscale (micro-fluidics, NEMS, advanced drug delivery), continuum theories like Navier-Stokes or continuum mechanics often break down. We need atomistic detail.
 2.  **The Rise of Compute:** Moore's Law and the advent of GPU computing have allowed us to simulate systems that were impossible 10 years ago.
 
-:::{figure} https://upload.wikimedia.org/wikipedia/commons/e/e5/G5k_hpc.jpg
+:::{figure} ../images/cluster.jpg
 :label: fig-hpc
 :width: 80%
 :align: center
