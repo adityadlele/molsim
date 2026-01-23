@@ -1,0 +1,14 @@
+version: 1
+project:
+  title: Molecular Simulations
+  id: mol-sim-2025
+  exclude:
+    - venv
+    - '**/venv'
+    - _build
+site:
+  template: book-theme
+  # CRITICAL: This fixes the broken CSS styles
+  base_url: /molsim
+toc:
+  - file: README.md
