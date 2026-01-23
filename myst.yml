@@ -9,11 +9,16 @@ project:
     - title: Lecture Notes
       children:
         - file: notes/01_intro.md
+        - file: notes/02_hpc_concepts.md
+        - file: notes/03_software_workflow.md
 
     # Part 2: Hands-on
     - title: Tutorials
       children:
         - file: tutorials/01_access_setup.md
+        - file: tutorials/02_access_anvil.md
+        - file: tutorials/03_linux_survival.md
+        - file: tutorials/04_python_conda.md
   # 2. Ignore Rule: This prevents it from looking in venv ever again
   exclude:
     - venv
