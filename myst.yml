@@ -5,6 +5,10 @@ project:
   # 1. Clean TOC: We only want your actual file here
   toc:
     - file: README.md
+
+    - title: Lecture Notes
+      children:
+        - file: notes/01_intro.md
   # 2. Ignore Rule: This prevents it from looking in venv ever again
   exclude:
     - venv
