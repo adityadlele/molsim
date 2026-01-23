@@ -2,6 +2,8 @@ version: 1
 project:
   title: Molecular Simulations
   id: mol-sim-2025
+  # FIX: We must explicitly tell it which file is the homepage
+  index: README.md
   exclude:
     - venv
     - '**/venv'
@@ -10,5 +12,4 @@ project:
 site:
   template: book-theme
   options:
-    # MOVED: The error log specifically asked for this nesting
     base_url: /molsim
