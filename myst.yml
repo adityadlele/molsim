@@ -6,9 +6,9 @@ project:
     - venv
     - '**/venv'
     - _build
+
 site:
   template: book-theme
-  # CRITICAL: This fixes the broken CSS styles
-  base_url: /molsim
-toc:
-  - file: README.md
+  options:
+    # MOVED: The error log specifically asked for this nesting
+    base_url: /molsim

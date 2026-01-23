@@ -16,11 +16,15 @@ jobs:
           python-version: '3.11'
           
       - name: Install dependencies
+        # This installs the myst engine
         run: pip install "jupyter-book>=2.0.0"
         
       - name: Build and Fix Styles
         run: |
-          jupyter-book build --html .
+          # Use the native command, without the dot argument
+          myst build --html
+          
+          # Force the styling fix
           touch _build/html/.nojekyll
           
       - name: Deploy
