@@ -11,6 +11,8 @@ project:
         - file: notes/01_intro.md
         - file: notes/02_hpc_concepts.md
         - file: notes/03_software_workflow.md
+        - file: notes/04_atomic_view.md
+        - file: notes/05_stat_mech.md
 
     # Part 2: Hands-on
     - title: Tutorials

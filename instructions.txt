@@ -1,0 +1,23 @@
+### **1. How to activate venv**
+
+Open your terminal in the `molsim` folder and run:
+
+* **Mac/Linux:** `source venv/bin/activate`
+* **Windows (Command Prompt):** `venv\Scripts\activate`
+* **Windows (PowerShell):** `.\venv\Scripts\Activate.ps1`
+
+### **2. How to create site locally**
+
+Once your environment is active, run the following command to build the project and launch a local web server:
+`jupyter book start`
+The terminal will provide a link (usually `http://localhost:3000`) where you can view your site.
+
+### **3. How to push on GitHub**
+
+To send your local changes to the live website, run these commands in order:
+
+1. `git add .`
+2. `git commit -m "Your description of changes"`
+3. `git push`
+
+Would you like me to create a simple **Markdown template** that you can copy-paste to quickly start your next lecture note?
