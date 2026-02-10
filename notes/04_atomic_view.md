@@ -58,7 +58,15 @@ To truly appreciate the "Atomistic View," let us compare two materials composed 
 1.  **Hydrogen Gas ($H_2$):** A gas at room temperature. It is light, invisible, and expands to fill any volume.
 2.  **Iron ($Fe$):** A solid metal. It is heavy, shiny, conductive, and rigid.
 
-![Comparison of a hydrogen gas cylinder next to an iron block](images/hydrogen_vs_iron_macro.jpg)
+
+```{figure} /images/hydrogen_vs_iron_macro.png
+:alt: Iron_vs_H2
+:width: 300px
+:align: center
+:name: fig-iron-h2
+
+Comparison of a hydrogen gas cylinder next to an iron block.
+```
 
 Both are made of atoms. Both have protons, neutrons, and electrons. Why is one a chaotic gas and the other a rigid solid? The answer lies in **structure** and **motion**.
 
@@ -69,7 +77,14 @@ If we were to look at hydrogen gas under a powerful microscope, we would see **c
 * **Motion:** These molecules are flying through space at incredible speeds (approx. 1700 m/s at room temperature).
 * **Interaction:** The molecules are far apart. They ignore each other until they collide, bouncing off like billiard balls.
 
-![Animation of chaotic molecular motion in hydrogen gas](images/hydrogen_gas_motion.gif)
+```{figure} /images/hydrogen_gas_motion.gif
+:alt: molecular motion in hydrogen gas
+:width: 500px
+:align: center
+:name: fig-hydrogen-motion
+
+Simulated motion in hydrogen gas at 300K for 10 fs.
+```
 
 ### Zooming into Iron ($Fe$)
 If we look at the iron block, we see **order**.
@@ -77,7 +92,14 @@ If we look at the iron block, we see **order**.
 * **Structure:** Iron atoms pack together in a highly organized, repeating geometric pattern known as a **Crystal Lattice**. In this state, every atom shares electrons with its neighbors, creating a "glue" that holds the structure together.
 * **Motion:** Are these atoms still? **No.** Even in a solid block of steel, the atoms are vibrating furiously. They are trapped in their lattice sites, shaking back and forth, but they generally do not leave their assigned spots.
 
-![Crystal lattice structure of iron showing atomic arrangement](images/iron_lattice_structure.jpg)
+```{figure} /images/iron_lattice_structure.jpg
+:alt: Crystal lattice structure of iron
+:width: 300px
+:align: center
+:name: fig-iron-lattice
+
+The Body-Centered Cubic (BCC) crystal lattice structure of Iron. Note the highly ordered, repeating arrangement of atoms that characterizes metallic bonding.
+```
 
 ---
 

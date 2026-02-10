@@ -165,9 +165,9 @@ An **Ensemble** is the collection of all these possible mental copies. By averag
 
 ---
 
----
-
----
+:::{warning} Scope of this Section
+The following text is **not** intended to be a rigorous or exhaustive treatment of Statistical Mechanics. We are using a simplified framework to introduce the core vocabulary and concepts necessary to understand how Molecular Dynamics (MD) software calculates physical properties. For the full mathematical derivations, please refer to the advanced textbooks listed in the resources section.
+:::
 
 ## 9. The Partition Function and Calculation of Averages
 
@@ -198,7 +198,6 @@ $$\langle E \rangle = \frac{1}{Z} \sum E_i e^{-\beta E_i}$$
 
 This mathematical definition is the foundation for the **Equipartition Theorem**, which we use next to define temperature.
 
----
 
 ---
 
@@ -327,11 +326,11 @@ For the vast majority of molecular dynamics (biomolecules, fluids, polymers), we
 
 ### 📚 Essential Textbooks
 * **"Statistical Mechanics: Theory and Molecular Simulation" by Mark Tuckerman:**
-    * *Level:* Advanced. This is the definitive text for modern MD. It covers the Liouville operator and rigorous phase space dynamics.
+    * *Level:* Advanced. This is one of the definitive text for modern MD.
 * **"Introduction to Modern Statistical Mechanics" by David Chandler:**
-    * *Level:* Intermediate. A classic, concise text that builds intuition without getting bogged down in pages of algebra.
+    * *Level:* Intermediate. A classic, concise text that builds intuition.
 * **"Molecular Driving Forces" by Dill & Bromberg:**
-    * *Level:* Beginner/Intermediate. Excellent for understanding the "Why" (Entropy/Free Energy) in biological contexts.
+    * *Level:* Beginner/Intermediate.
 
 ### 🖥️ Online Lectures
 * [MIT OpenCourseWare: Statistical Mechanics I (Prof. Kardar)](https://ocw.mit.edu/courses/physics/8-333-statistical-mechanics-i-statistical-mechanics-of-particles-fall-2013/)

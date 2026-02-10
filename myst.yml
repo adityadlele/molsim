@@ -13,6 +13,7 @@ project:
         - file: notes/03_software_workflow.md
         - file: notes/04_atomic_view.md
         - file: notes/05_stat_mech.md
+        #- file: notes/06_mol_dyn.md
 
     # Part 2: Hands-on
     - title: Tutorials
@@ -21,6 +22,7 @@ project:
         - file: tutorials/02_access_anvil.md
         - file: tutorials/03_linux_survival.md
         - file: tutorials/04_python_conda.md
+        - file: tutorials/05_stat_mech.md
   # 2. Ignore Rule: This prevents it from looking in venv ever again
   exclude:
     - venv
