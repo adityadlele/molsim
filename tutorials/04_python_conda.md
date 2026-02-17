@@ -82,42 +82,74 @@ print(sys.executable)
 
 ## 4. Creating Your Own Environment (Optional)
 
-If you want to create a *custom* environment for your own separate research projects, follow these steps:
+If you want to create a *custom* environment for your own separate research projects, we recommend using the system's `conda-env-mod` tool. Unlike standard conda commands, this tool automatically generates a **module file** (so you can easily load it later) and a **Jupyter kernel** (so it appears in your notebook dropdowns).
 
-1. **Create the environment**:
+**Step 1: Load the Conda module**
+You must load the system's base conda module to access the creation script.
+
 ```bash
-conda create -n my_md_env python=3.10 numpy matplotlib
+module load conda
 
 ```
 
+**Step 2: Create the environment**
+Use the `conda-env-mod` script to create your environment. We recommend adding the `--jupyter` flag immediately so it sets up the kernel for you.
 
-2. **Activate it**:
 ```bash
-conda activate my_md_env
+# Create an environment named 'my_md_env' with Jupyter support
+conda-env-mod create -n my_md_env --jupyter
 
 ```
 
+*Follow the on-screen prompts. You may need to type `y` to confirm the creation.*
 
-3. **Install additional packages**:
+**Step 3: Load your new environment**
+Once created, the script will print specific instructions on how to load your new environment. You must load this module to use it. It generally follows this pattern:
+
 ```bash
+# 1. Tell the system where to look for your custom modules
+module use $HOME/privatemodules
+
+# 2. Load your specific environment module
+# (Note: The actual version suffix 'py3.X.X' will be displayed in the output of Step 2)
+module load conda-env/my_md_env-py3.8.8
+
+```
+
+**Step 4: Install Additional Packages**
+Once the module is loaded (Step 3), you are "inside" your environment. You can now use standard `conda` or `pip` commands to install any software you need.
+
+* **Install via Conda (Recommended for scientific libraries):**
+```bash
+# Install standard libraries
+conda install numpy matplotlib
+
+# Install MDAnalysis from the conda-forge channel
 conda install -c conda-forge mdanalysis
 
 ```
 
 
-4. **Connect it to Jupyter**:
-If you want your custom environment to show up in the Jupyter dropdown menu, you must install the `ipykernel` package:
+* **Install via Pip (If not available on Conda):**
 ```bash
-conda install ipykernel
-python -m ipykernel install --user --name my_md_env --display-name "Python (My_Custom_Env)"
+pip install package_name
 
 ```
 
 
 
----
+**Note on Jupyter:** Because you used the `--jupyter` flag in Step 2, you do **not** need to manually install `ipykernel`. Your environment will automatically appear as **"Python (My my_md_env Kernel)"** in the Jupyter interface.
+
+
+**Detailed Documentation:**
+For more advanced usage, troubleshooting, or cluster-specific policies, please refer to the official [Anvil User Guide: Installing Python Packages](https://www.rcac.purdue.edu/knowledge/anvil/run/examples/apps/python/packages).
+
+
+
+
 
 ## 📚 Resources
 
 * [Official Conda Cheat Sheet](https://docs.conda.io/projects/conda/en/latest/user-guide/cheatsheet.html)
-* [Anvil User Guide: Python](https://www.rcac.purdue.edu/knowledge/anvil/run/python)
+* [Anvil User Guide: Python](https://www.rcac.purdue.edu/knowledge/anvil/run/examples/apps/python/packages)
+```
