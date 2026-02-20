@@ -24,6 +24,9 @@ project:
         - file: tutorials/04_python_conda.md
         - file: tutorials/05_stat_mech.md
         - file: tutorials/06_MD_run_using_py.md
+        - file: tutorials/07_thermostats.md
+        #- file: tutorials/08_LAMMPS_sim.md
+        #- file: tutorials/09_Python_for_MD.md
   # 2. Ignore Rule: This prevents it from looking in venv ever again
   exclude:
     - venv

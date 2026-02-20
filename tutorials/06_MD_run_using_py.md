@@ -400,3 +400,165 @@ def update_solid(frame):
 anim = animation.FuncAnimation(fig, update_solid, frames=200, interval=50, blit=True)
 plt.close()
 HTML(anim.to_jshtml())
+```
+
+---
+
+## Exercise 3: How Long Does MD Actually Take?
+
+In the lecture notes, we emphasized that real simulations require **billions of timesteps** and are impossible to run on a laptop. But *why exactly*? Let's measure it ourselves.
+
+This exercise does two things:
+1. **Times** the main simulation loop for our 20-particle system.
+2. **Scales** the particle count and plots how runtime grows — revealing the $O(N^2)$ bottleneck in `compute_forces`.
+
+### Part A: Timing the Main Loop
+
+**Run this cell to time 200 steps of the simulation:**
+
+```python
+import time
+
+# --- SETUP (same as Step 5) ---
+DT = 0.005
+STEPS = 200
+
+pos = positions.copy()
+vel = velocities.copy()
+acc, _ = compute_forces(pos)
+
+# --- TIMED LOOP ---
+start_time = time.perf_counter()
+
+for step in range(STEPS):
+    pos, vel, acc, _ = velocity_verlet_step(pos, vel, acc, DT)
+
+end_time = time.perf_counter()
+
+wall_time_s = end_time - start_time
+time_per_step_ms = (wall_time_s / STEPS) * 1000
+
+print("=" * 45)
+print(f"  Particles (N)      : {N_PARTICLES}")
+print(f"  Steps completed    : {STEPS}")
+print(f"  Total wall time    : {wall_time_s:.3f} seconds")
+print(f"  Time per step      : {time_per_step_ms:.3f} ms")
+print("=" * 45)
+
+# --- SCALE UP: How long for a REAL simulation? ---
+# A real MD run targets ~1 microsecond = 1,000,000 steps at dt=1fs
+REAL_STEPS = 1_000_000
+projected_s = (wall_time_s / STEPS) * REAL_STEPS
+projected_days = projected_s / 86400
+
+print(f"\n  Projected time for {REAL_STEPS:,} steps:")
+print(f"  → {projected_s:,.1f} seconds  ({projected_days:.1f} days)")
+print(f"\n  This is why we need supercomputers!")
+```
+
+### Part B: The $O(N^2)$ Scaling Problem
+
+The `compute_forces` function loops over every **pair** of atoms. For $N$ atoms, there are $N(N-1)/2$ pairs. Double the atoms, and you quadruple the work.
+
+Let's measure this directly:
+
+```python
+import time
+import numpy as np
+import matplotlib.pyplot as plt
+
+# --- PARAMETERS ---
+# Test a range of particle counts
+particle_counts = [5, 10, 20, 40, 80, 160]
+TIMING_STEPS = 50          # Steps per timing run (keep short for large N)
+timings = []
+
+print(f"{'N':>6} | {'Time/step (ms)':>16} | {'Pairs':>10}")
+print("-" * 38)
+
+for N in particle_counts:
+    # Place N atoms randomly (no overlap check for speed)
+    test_pos = np.random.rand(N, 2) * BOX_SIZE
+    test_vel = (np.random.rand(N, 2) - 0.5)
+    test_acc, _ = compute_forces(test_pos)
+    
+    # Time TIMING_STEPS steps
+    t0 = time.perf_counter()
+    for _ in range(TIMING_STEPS):
+        test_pos, test_vel, test_acc, _ = velocity_verlet_step(
+            test_pos, test_vel, test_acc, DT
+        )
+    t1 = time.perf_counter()
+    
+    ms_per_step = ((t1 - t0) / TIMING_STEPS) * 1000
+    n_pairs = N * (N - 1) // 2
+    timings.append(ms_per_step)
+    print(f"{N:>6} | {ms_per_step:>16.4f} | {n_pairs:>10,}")
+
+# --- PLOT ---
+fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+
+# Left: Raw timing
+axes[0].plot(particle_counts, timings, 'o-', color='steelblue', lw=2, ms=8)
+axes[0].set_xlabel("Number of Particles (N)", fontsize=12)
+axes[0].set_ylabel("Wall Time per Step (ms)", fontsize=12)
+axes[0].set_title("Raw Scaling: Time vs. N", fontsize=13)
+axes[0].grid(True, alpha=0.4)
+
+# Right: Log-log plot to reveal the power law
+axes[1].loglog(particle_counts, timings, 'o-', color='crimson', lw=2, ms=8, label='Measured')
+
+# Overlay a reference O(N^2) line
+N_arr = np.array(particle_counts, dtype=float)
+ref = timings[0] * (N_arr / particle_counts[0])**2
+axes[1].loglog(particle_counts, ref, 'k--', lw=1.5, alpha=0.6, label=r'$O(N^2)$ reference')
+
+axes[1].set_xlabel("Number of Particles (N)", fontsize=12)
+axes[1].set_ylabel("Wall Time per Step (ms)", fontsize=12)
+axes[1].set_title(r"Log-Log Scaling (slope ≈ 2 confirms $O(N^2)$)", fontsize=13)
+axes[1].legend()
+axes[1].grid(True, which='both', alpha=0.3)
+
+plt.suptitle("compute_forces Scaling Analysis", fontsize=14, fontweight='bold', y=1.02)
+plt.tight_layout()
+plt.show()
+
+print("\nConclusion: The log-log slope ≈ 2 confirms O(N²) scaling.")
+print("Real codes use neighbor lists + cutoffs to reduce this to ~O(N).")
+```
+
+### What Does This Mean in Practice?
+
+The table below uses your measured `time_per_step` to project realistic runtimes. Real MD codes (LAMMPS, GROMACS) use **neighbor lists** and parallel GPUs to achieve close to $O(N)$ scaling — but the same physics applies.
+
+```python
+# --- PROJECTION TABLE ---
+# Uses the per-step time measured in Part A
+
+print(f"\nProjection based on N={N_PARTICLES} atoms, {time_per_step_ms:.3f} ms/step\n")
+print(f"{'Target simulation':25} | {'Steps needed':>14} | {'Estimated time':>16}")
+print("-" * 60)
+
+scenarios = [
+    ("100 steps (this tutorial)",   100),
+    ("1,000 steps",                 1_000),
+    ("100,000 steps",               100_000),
+    ("1 µs (1,000,000 steps)",      1_000_000),
+    ("1 ms (1,000,000,000 steps)",  1_000_000_000),
+]
+
+for label, n_steps in scenarios:
+    total_s = (time_per_step_ms / 1000) * n_steps
+    if total_s < 60:
+        time_str = f"{total_s:.2f} sec"
+    elif total_s < 3600:
+        time_str = f"{total_s/60:.1f} min"
+    elif total_s < 86400:
+        time_str = f"{total_s/3600:.1f} hours"
+    else:
+        time_str = f"{total_s/86400:.0f} days"
+    print(f"{label:25} | {n_steps:>14,} | {time_str:>16}")
+
+print("\nThis is why HPC clusters running thousands of CPU cores in")
+print("parallel — like Anvil — are essential for real research!")
+```
