@@ -1,205 +1,606 @@
+# Tutorial 8: LAMMPS Input Files — Building Your First Simulation
 
-# Tutorial 8: Getting Started with LAMMPS and Molecular Dynamics
+**Objective:** Learn to write LAMMPS input scripts by building a simple Argon gas simulation from scratch.
 
-Welcome to the world of Molecular Dynamics (MD)! In this tutorial, we will transition from writing our own Python loops to using professional, high-performance MD software. We will learn the basics of setting up a simulation, defining the physics, and running it on a supercomputer.
+:::{note} Prerequisites
+* Completion of Tutorial 6 (MD Engine concepts)
+* Basic understanding of Lennard-Jones potential
+* Access to Anvil cluster (Tutorial 2)
+:::
 
 ---
 
 ## 1. What is LAMMPS?
 
-**LAMMPS** stands for **L**arge-scale **A**tomic/**M**olecular **M**assively **P**arallel **S**imulator. 
+**LAMMPS** (Large-scale Atomic/Molecular Massively Parallel Simulator) is one of the most widely-used molecular dynamics codes in the world. Unlike our Python toy models, LAMMPS is production-grade software designed to:
 
-* It is an open-source MD code originally developed by Sandia National Laboratories.
-* It is one of the most widely used simulation engines in the world, particularly tailored for **materials science**, soft matter, polymers, and solid-state physics. 
-* *Note:* While LAMMPS *can* perform biological simulations, bio-related research (like simulating proteins, DNA, or lipid bilayers) typically relies on specialized codes such as **GROMACS** or **NAMD**, which are highly optimized for those specific molecular structures.
+* Simulate millions of atoms efficiently
+* Run in parallel across thousands of CPU cores
+* Handle complex force fields (proteins, polymers, metals, etc.)
+* Integrate with analysis tools and visualization software
 
----
-
-## 2. What Do You Need to Run a LAMMPS Simulation?
-
-To successfully run an MD job, you need four core components:
-
-1. **A Geometry File (or Generation Commands):** You need to tell the software where the atoms are located in 3D space. You can either read in a pre-made coordinate file (e.g., a `.data` file built in a molecule editor) or use LAMMPS commands to generate a crystal lattice or a random gas box directly in the input script.
-2. **An MD Potential (Force Field):** You must define how the atoms interact with one another. This dictates the underlying physics of the simulation.
-3. **Simulation Parameters:** You must specify the thermodynamic ensemble (NVE, NVT, NPT), the timestep, the target temperature/pressure, and the total duration of the simulation.
-4. **A Job Submission Script:** Because MD requires heavy computation, you will not run this on your laptop. You will submit it to a supercomputer cluster (like Purdue's Anvil) using a scheduler script.
-
-
+LAMMPS is **command-driven**. You write a text file (the "input script") that tells LAMMPS what to do, step by step. This tutorial will teach you the structure of that file.
 
 ---
 
-## 3. Our First System: Argon Gas
+## 2. The Anatomy of a LAMMPS Input File
 
-For our first simulation, we are going to model Argon gas. 
+A LAMMPS input script is read **sequentially** from top to bottom. It is divided into logical sections (though LAMMPS doesn't enforce this — the sections are for human readability).
 
-* **Historical Significance:** The very first realistic molecular dynamics simulation was performed by Aneesur Rahman in 1964 using liquid Argon. It is considered the "Hello World" of statistical mechanics and computational chemistry.
-* **The Potential:** Argon is a noble gas, meaning it does not form chemical bonds. Its atomic interactions are perfectly described by the purely non-bonded **Lennard-Jones (LJ) potential**, which models both the van der Waals attraction at long distances and the Pauli repulsion at short distances.
+**The Standard Structure:**
 
+```text
+# ========================================
+# SECTION 1: INITIALIZATION
+# ========================================
+# Define units, boundary conditions, atom style
 
+# ========================================
+# SECTION 2: SYSTEM DEFINITION
+# ========================================
+# Create the simulation box and atoms
 
-* **The Ensemble:** We will run an **NVE** simulation (Microcanonical Ensemble). This means the **N**umber of particles, the **V**olume of the box, and the Total **E**nergy are strictly conserved. We will not use a thermostat; the atoms will simply move according to Newton's equations of motion.
+# ========================================
+# SECTION 3: FORCE FIELD
+# ========================================
+# Define interactions (Lennard-Jones parameters)
+
+# ========================================
+# SECTION 4: SIMULATION SETTINGS
+# ========================================
+# Set timestep, neighbor lists, fixes
+
+# ========================================
+# SECTION 5: OUTPUT
+# ========================================
+# Specify what data to save
+
+# ========================================
+# SECTION 6: EXECUTION
+# ========================================
+# Run the simulation
+```
+
+Each section uses specific LAMMPS commands. We'll build them one at a time.
 
 ---
 
-## 4. The LAMMPS Input File Structure
+## 3. Section 1: Initialization
 
-LAMMPS scripts are traditionally named with an `in.` prefix (e.g., `in.argon`). The script is read top-to-bottom and is generally divided into four distinct sections: Initialization, System Definition, Settings, and Run.
+The first section sets up the "universe" constants that govern the entire simulation.
 
-Create a file named `in.argon` on your computer and copy the following code into it:
+### 3.1 Units
+
+LAMMPS supports multiple unit systems. For noble gases and simple fluids, we use **`lj`** (Lennard-Jones reduced units), where:
+* Energy is in units of $\epsilon$
+* Distance is in units of $\sigma$
+* Mass is in units of $m$
+* Time is in units of $\tau = \sigma\sqrt{m/\epsilon}$
+
+For Argon, the conversion to real units is:
+* $\epsilon = 0.238$ kcal/mol (119.8 K in temperature units)
+* $\sigma = 3.405$ Å
+* $m = 39.948$ amu
+
+**Command:**
+```lammps
+units lj
+```
+
+### 3.2 Atom Style
+
+The `atom_style` command defines what properties each atom has. For a simple monatomic gas, we use `atomic` (just position, velocity, type).
+
+**Command:**
+```lammps
+atom_style atomic
+```
+
+### 3.3 Boundary Conditions
+
+We want **periodic boundaries** in all three directions (x, y, z) so the gas doesn't escape.
+
+**Command:**
+```lammps
+boundary p p p
+```
+
+### 3.4 Complete Section 1
 
 ```lammps
-# -------------------------------------------------------------------
-# 1. INITIALIZATION
-# -------------------------------------------------------------------
-units           real            # time=fs, energy=kcal/mol, distance=Angstroms
-dimension       3               # 3D simulation
-boundary        p p p           # Periodic boundary conditions in x, y, z
-atom_style      atomic          # Simplest style: atoms have mass, no charge/bonds
-
-# -------------------------------------------------------------------
-# 2. SYSTEM DEFINITION
-# -------------------------------------------------------------------
-# Create a cubic box of 50x50x50 Angstroms
-region          mybox block 0 50 0 50 0 50
-create_box      1 mybox         # Create a simulation box with 1 atom type
-
-# Populate the box with 500 atoms randomly
-create_atoms    1 random 500 12345 mybox 
-
-# Define the mass of our atom type 1 (Argon = 39.95 g/mol)
-mass            1 39.95
-
-# -------------------------------------------------------------------
-# 3. SIMULATION SETTINGS (The Physics)
-# -------------------------------------------------------------------
-# Define the Lennard-Jones potential and a cutoff of 10.0 Angstroms
-pair_style      lj/cut 10.0
-
-# pair_coeff: atom_type1 atom_type2 epsilon sigma
-pair_coeff      1 1 0.238 3.405  
-
-# Give atoms an initial velocity corresponding to 300 K
-# 87287 is a random seed for the velocity generator
-velocity        all create 300.0 87287 dist gaussian
-
-# -------------------------------------------------------------------
-# 4. RUN DEFINITION
-# -------------------------------------------------------------------
-# Apply the NVE integrator to all atoms
-fix             1 all nve
-
-# Tell LAMMPS what to print to the screen/log file every 100 steps
-# step = timestep, temp = temperature, pe = potential energy, ke = kinetic energy, etotal = total energy
-thermo          100
-thermo_style    custom step temp pe ke etotal press
-
-# Dump the atomic coordinates to a file every 500 steps so we can visualize it later
-dump            1 all custom 500 dump.argon id type x y z
-
-# Define the timestep (1.0 femtoseconds is standard for real units)
-timestep        1.0
-
-# Run the simulation for 10,000 steps
-run             10000
-
+# ========================================
+# SECTION 1: INITIALIZATION
+# ========================================
+units           lj
+atom_style      atomic
+boundary        p p p
 ```
 
 ---
 
-## 5. Job Submission Script for Anvil
+## 4. Section 2: System Definition
 
-Supercomputers like Anvil use a workload manager called **Slurm** to queue and distribute jobs fairly among thousands of users. You must write a shell script that requests computing resources (like CPU cores and time) and tells the computer how to launch LAMMPS.
+Now we create the simulation box and populate it with atoms.
 
-Create a file named `submit_lammps.sh` and copy the following code. **Make sure to update the account allocation code to match our class!**
+### 4.1 Defining the Box
+
+We need to specify the size of our cubic simulation box. For a dense Argon system, we'll use a box that gives a reduced density $\rho^* = 0.8$ (liquid-like density).
+
+For 2000 atoms at $\rho^* = 0.8$:
+$$\rho^* = \frac{N}{\sigma^3 \times V} = \frac{N}{V} \quad \text{(in reduced units)}$$
+
+$$V = \frac{N}{\rho^*} = \frac{2000}{0.8} = 2500 \, \sigma^3$$
+
+$$L = V^{1/3} = 2500^{1/3} \approx 13.57 \, \sigma$$
+
+**Command:**
+```lammps
+lattice         fcc 0.8
+region          simbox block 0 13.57 0 13.57 0 13.57
+create_box      1 simbox
+```
+
+**Explanation:**
+* `lattice fcc 0.8`: Creates a face-centered cubic lattice template with density 0.8
+* `region simbox`: Defines a rectangular region named "simbox"
+* `create_box 1 simbox`: Creates the box with space for 1 atom type
+
+### 4.2 Creating Atoms
+
+We'll place atoms on the FCC lattice to avoid overlaps.
+
+**Command:**
+```lammps
+create_atoms    1 box
+```
+
+This creates atoms of type 1 throughout the entire box, using the lattice spacing we defined.
+
+### 4.3 Setting Initial Velocities
+
+We need to give atoms random velocities consistent with 500 K (in reduced units, $T^* = k_B T / \epsilon$).
+
+For Argon at 500 K:
+$$T^* = \frac{500 \text{ K}}{119.8 \text{ K}} = 4.17$$
+
+**Command:**
+```lammps
+velocity        all create 4.17 87287 dist gaussian
+```
+
+**Explanation:**
+* `all`: Apply to all atoms
+* `create 4.17`: Generate velocities for T* = 4.17
+* `87287`: Random seed (any integer works)
+* `dist gaussian`: Use Gaussian (Maxwell-Boltzmann) distribution
+
+### 4.4 Setting Masses
+
+For reduced units, mass is 1.0.
+
+**Command:**
+```lammps
+mass            1 1.0
+```
+
+### 4.5 Complete Section 2
+
+```lammps
+# ========================================
+# SECTION 2: SYSTEM DEFINITION
+# ========================================
+lattice         fcc 0.8
+region          simbox block 0 13.57 0 13.57 0 13.57
+create_box      1 simbox
+create_atoms    1 box
+mass            1 1.0
+velocity        all create 4.17 87287 dist gaussian
+```
+
+---
+
+## 5. Section 3: Force Field
+
+This section defines how atoms interact — the heart of the simulation.
+
+### 5.1 Pair Style
+
+We use the Lennard-Jones 12-6 potential with a cutoff.
+
+**Command:**
+```lammps
+pair_style      lj/cut 3.0
+```
+
+This sets a cutoff distance of $3.0\sigma$ (interactions beyond this are ignored).
+
+### 5.2 Pair Coefficients
+
+For a single atom type interacting with itself via LJ, we specify $\epsilon$ and $\sigma$. In reduced units, both are 1.0.
+
+**Command:**
+```lammps
+pair_coeff      1 1 1.0 1.0 3.0
+```
+
+**Syntax:** `pair_coeff type1 type2 epsilon sigma cutoff`
+
+### 5.3 Neighbor List Settings
+
+LAMMPS builds a "neighbor list" of nearby atoms to speed up force calculations. The `neighbor` command controls this.
+
+**Command:**
+```lammps
+neighbor        0.3 bin
+neigh_modify    every 1 delay 0 check yes
+```
+
+**Explanation:**
+* `0.3 bin`: Add a 0.3σ "skin" around the cutoff
+* `every 1`: Rebuild list every timestep
+* `delay 0`: Start building immediately
+* `check yes`: Check if rebuild is needed
+
+### 5.4 Complete Section 3
+
+```lammps
+# ========================================
+# SECTION 3: FORCE FIELD
+# ========================================
+pair_style      lj/cut 3.0
+pair_coeff      1 1 1.0 1.0 3.0
+neighbor        0.3 bin
+neigh_modify    every 1 delay 0 check yes
+```
+
+---
+
+## 6. Section 4: Simulation Settings
+
+### 6.1 Timestep
+
+For LJ systems, a typical timestep is $\Delta t^* = 0.005$ (in reduced units).
+
+**Command:**
+```lammps
+timestep        0.005
+```
+
+### 6.2 Thermostat (NVT Ensemble)
+
+We'll use the Nosé-Hoover thermostat to maintain constant temperature.
+
+**Command:**
+```lammps
+fix             1 all nvt temp 4.17 4.17 0.5
+```
+
+**Explanation:**
+* `fix 1`: Assign ID "1" to this fix
+* `all`: Apply to all atoms
+* `nvt`: Nosé-Hoover thermostat
+* `temp 4.17 4.17`: Start and end temperature (T* = 4.17)
+* `0.5`: Damping parameter (controls coupling strength, in time units)
+
+### 6.3 Complete Section 4
+
+```lammps
+# ========================================
+# SECTION 4: SIMULATION SETTINGS
+# ========================================
+timestep        0.005
+fix             1 all nvt temp 4.17 4.17 0.5
+```
+
+---
+
+## 7. Section 5: Output
+
+We need to save thermodynamic data and optionally trajectory snapshots.
+
+### 7.1 Thermo Output
+
+The `thermo` command controls how often thermodynamic data is printed.
+
+**Command:**
+```lammps
+thermo_style    custom step temp press pe ke etotal density
+thermo          100
+```
+
+**Explanation:**
+* `thermo_style custom`: Use custom output format
+* `step temp press pe ke etotal density`: Columns to print
+* `thermo 100`: Print every 100 steps
+
+### 7.2 Trajectory Output (Optional)
+
+To visualize atoms moving, save coordinates periodically.
+
+**Command:**
+```lammps
+dump            1 all custom 500 argon.lammpstrj id type x y z vx vy vz
+dump_modify     1 sort id
+```
+
+**Explanation:**
+* `dump 1 all custom`: Create dump with ID "1", include all atoms
+* `500`: Save every 500 steps
+* `argon.lammpstrj`: Output filename
+* `id type x y z vx vy vz`: Data to save
+* `dump_modify 1 sort id`: Sort atoms by ID for consistent visualization
+
+### 7.3 Redirecting Thermo to File
+
+To save thermo data to a file for analysis:
+
+**Command:**
+```lammps
+log             thermo.out
+```
+
+This writes all thermo output to `thermo.out` instead of just the screen.
+
+### 7.4 Complete Section 5
+
+```lammps
+# ========================================
+# SECTION 5: OUTPUT
+# ========================================
+thermo_style    custom step temp press pe ke etotal density
+thermo          100
+dump            1 all custom 500 argon.lammpstrj id type x y z vx vy vz
+dump_modify     1 sort id
+log             thermo.out
+```
+
+---
+
+## 8. Section 6: Execution
+
+Finally, we tell LAMMPS to actually run the simulation.
+
+### 8.1 Running the Simulation
+
+**Command:**
+```lammps
+run             50000
+```
+
+This runs 50,000 timesteps. With $\Delta t^* = 0.005$, total simulation time is $50000 \times 0.005 = 250$ reduced time units.
+
+### 8.2 Clean Exit
+
+**Command:**
+```lammps
+write_data      final_state.data
+```
+
+This saves the final positions and velocities to a file, which can be used to restart or continue the simulation later.
+
+### 8.3 Complete Section 6
+
+```lammps
+# ========================================
+# SECTION 6: EXECUTION
+# ========================================
+run             50000
+write_data      final_state.data
+```
+
+---
+
+## 9. Complete Input File
+
+Here is the full, working LAMMPS input script:
+
+```lammps
+# ========================================
+# LAMMPS Input Script: Argon Gas
+# Tutorial 7 - Practical Molecular Simulations
+# 2000 atoms, T* = 4.17 (500 K), rho* = 0.8
+# ========================================
+
+# ========================================
+# SECTION 1: INITIALIZATION
+# ========================================
+units           lj
+atom_style      atomic
+boundary        p p p
+
+# ========================================
+# SECTION 2: SYSTEM DEFINITION
+# ========================================
+lattice         fcc 0.8
+region          simbox block 0 13.57 0 13.57 0 13.57
+create_box      1 simbox
+create_atoms    1 box
+mass            1 1.0
+velocity        all create 4.17 87287 dist gaussian
+
+# ========================================
+# SECTION 3: FORCE FIELD
+# ========================================
+pair_style      lj/cut 3.0
+pair_coeff      1 1 1.0 1.0 3.0
+neighbor        0.3 bin
+neigh_modify    every 1 delay 0 check yes
+
+# ========================================
+# SECTION 4: SIMULATION SETTINGS
+# ========================================
+timestep        0.005
+fix             1 all nvt temp 4.17 4.17 0.5
+
+# ========================================
+# SECTION 5: OUTPUT
+# ========================================
+thermo_style    custom step temp press pe ke etotal density
+thermo          100
+dump            1 all custom 500 argon.lammpstrj id type x y z vx vy vz
+dump_modify     1 sort id
+log             thermo.out
+
+# ========================================
+# SECTION 6: EXECUTION
+# ========================================
+run             50000
+write_data      final_state.data
+```
+
+---
+
+## 10. Testing Your Input File on Anvil
+
+Before running a full production job, you can test your input file interactively.
+
+### 10.1 Loading LAMMPS Module
+
+LAMMPS on Anvil requires specific modules to be loaded:
 
 ```bash
-#!/bin/bash
-#SBATCH --job-name=argon_nve          # Name of your job
-#SBATCH --account=your_allocation     # FIXME: Replace with your specific class allocation code
-#SBATCH --partition=shared            # Use the shared queue
-#SBATCH --nodes=1                     # Number of nodes requested
-#SBATCH --ntasks=4                    # Number of CPU cores requested (4 is plenty for 500 atoms)
-#SBATCH --time=00:10:00               # Max walltime (10 minutes)
-#SBATCH --output=lammps_job_%j.out    # Standard output file (%j will be replaced by job ID)
-#SBATCH --error=lammps_job_%j.err     # Standard error file
-
-# 1. Load the required LAMMPS module on Anvil
-module purge
-module load lammps
-
-# 2. Move to the directory where you submitted the job
-cd $SLURM_SUBMIT_DIR
-
-# 3. Run LAMMPS using the MPI runner (srun)
-srun lmp -in in.argon
-
+module load gcc/11.2.0 openmpi/4.0.6
+module load lammps/20210310
 ```
 
-### How to Run Your Simulation
+### 10.2 Interactive Testing
 
-1. **Log in** to the Anvil cluster via SSH or the Open OnDemand web portal.
-2. **Upload** both your `in.argon` and `submit_lammps.sh` files to a new folder in your home or scratch directory.
-3. Open a terminal in that folder and **submit the job** by typing:
-`sbatch submit_lammps.sh`
-4. You can **check the status** of your job in the queue using:
-`squeue -u $USER`
-5. **Review the output:** Once finished, LAMMPS will generate a `log.lammps` file containing your thermodynamic data (Temperature, Energy, Pressure) and a `dump.argon` file containing the 3D trajectory of your atoms for visualization.
+Log in to Anvil and request an interactive session:
 
+```bash
+srun -p shared -A chm250117 --nodes=1 --ntasks=4 --time=00:30:00 --pty /bin/bash
+```
 
-## 6. Moving to Realistic Ensembles: NVT and NPT
+Once your interactive job starts:
 
-While the NVE ensemble is fantastic for verifying that your physics are correct (since total energy should be perfectly conserved), real-world laboratory experiments are rarely isolated from their surroundings. Usually, we control the **Temperature** (using a heat bath) and the **Pressure** (by exposing the system to the atmosphere). 
+```bash
+module load gcc/11.2.0 openmpi/4.0.6
+module load lammps/20210310
+lmp -in argon.in
+```
 
-To simulate these conditions, we change the integrator in LAMMPS.
+This will run LAMMPS and create the output files in your current directory.
 
-### The NVT Ensemble (Constant Volume and Temperature)
-In the NVT (Canonical) ensemble, the volume of the box is fixed, but the system exchanges heat with an imaginary thermostat to maintain a target temperature. LAMMPS typically uses the **Nosé-Hoover thermostat** for this.
+### 10.3 Class Examples Directory
 
+Sample LAMMPS input files are available in the shared class directory:
 
+```bash
+ls /anvil/projects/x-chm250117/class_examples/
+```
 
-**How to change your script:**
-To run an NVT simulation at 300 K, find the `fix` command in Section 4 of your `in.argon` script and replace it with:
+You can copy these examples to your workspace:
 
+```bash
+cp /anvil/projects/x-chm250117/class_examples/argon_example.in $SCRATCH/
+```
+
+---
+
+## 11. Understanding the Output
+
+After running, you'll have several files:
+
+| File | Contents |
+|------|----------|
+| `thermo.out` | Thermodynamic data (T, P, E) vs. time |
+| `argon.lammpstrj` | Trajectory snapshots for visualization |
+| `final_state.data` | Final configuration (for restart) |
+| `log.lammps` | Full LAMMPS log (includes warnings, timings) |
+
+### 11.1 Quick Check
+
+Open `thermo.out` and look at the columns:
+
+```text
+Step Temp Press PotEng KinEng TotEng Density 
+0 4.1700000 16.503422 -2.6604462 6.2487500 3.5883038 0.8000000 
+100 4.0523344 15.341847 -2.5327691 6.0722148 3.5394457 0.8000000 
+200 4.1134589 15.982564 -2.5932117 6.1637866 3.5705749 0.8000000 
+...
+```
+
+**What to look for:**
+* **Temperature:** Should fluctuate around 4.17 (our target)
+* **Total Energy:** Should be roughly constant (energy conservation)
+* **Density:** Should remain 0.8 (constant volume)
+
+---
+
+## 12. Common LAMMPS Commands Reference
+
+Here's a quick reference for commands you'll use frequently:
+
+| Command | Purpose | Example |
+|---------|---------|---------|
+| `units` | Set unit system | `units lj` |
+| `atom_style` | Define atom properties | `atom_style atomic` |
+| `boundary` | Set boundary conditions | `boundary p p p` |
+| `lattice` | Define crystal structure | `lattice fcc 0.8` |
+| `region` | Define geometric region | `region box block 0 10 0 10 0 10` |
+| `create_box` | Create simulation box | `create_box 1 box` |
+| `create_atoms` | Add atoms | `create_atoms 1 box` |
+| `mass` | Set atom mass | `mass 1 1.0` |
+| `velocity` | Set initial velocities | `velocity all create 1.0 12345` |
+| `pair_style` | Choose interaction model | `pair_style lj/cut 2.5` |
+| `pair_coeff` | Set interaction parameters | `pair_coeff 1 1 1.0 1.0` |
+| `timestep` | Set integration timestep | `timestep 0.005` |
+| `fix` | Apply constraints/thermostats | `fix 1 all nvt temp 1.0 1.0 0.1` |
+| `thermo` | Output frequency | `thermo 100` |
+| `dump` | Save trajectory | `dump 1 all custom 1000 traj.lammpstrj` |
+| `run` | Execute simulation | `run 10000` |
+
+---
+
+## 13. Exercise: Modify the Temperature
+
+**Task:** Create a second input file that simulates Argon at **300 K** instead of 500 K.
+
+**Steps:**
+1. Copy `argon.in` to `argon_300K.in`
+2. Calculate the reduced temperature: $T^* = 300 / 119.8 = 2.50$
+3. Change the `velocity` and `fix nvt` commands to use 2.50
+4. Change the output filenames to avoid overwriting
+5. Run both simulations and compare average temperatures
+
+<details>
+<summary>Click to see the solution</summary>
+
+**Modified lines:**
 ```lammps
-# Apply the NVT integrator to all atoms
-# temp <start_T> <stop_T> <T_damp>
-# T_damp determines how rapidly the temperature is relaxed (usually 100x the timestep)
-fix             1 all nvt temp 300.0 300.0 100.0
-
+velocity        all create 2.50 87287 dist gaussian
+fix             1 all nvt temp 2.50 2.50 0.5
+log             thermo_300K.out
+dump            1 all custom 500 argon_300K.lammpstrj id type x y z vx vy vz
 ```
+</details>
 
-*Note:* When using a thermostat, you will notice that your *Total Energy* is no longer conserved—it will fluctuate as the thermostat adds or removes kinetic energy to maintain 300 K.
+---
 
-### The NPT Ensemble (Constant Pressure and Temperature)
+## 14. Next Steps
 
-In the NPT (Isothermal-Isobaric) ensemble, both the temperature and the pressure are controlled. Because the pressure is held constant, the **volume of the simulation box will expand or contract** dynamically. This is the ensemble you must use if you want to measure the equilibrium density of a liquid or gas at atmospheric conditions.
+Now that you understand the structure of a LAMMPS input file:
+* **Tutorial 8:** Running LAMMPS on the Anvil cluster
+* **Tutorial 9:** Analyzing LAMMPS output with Python
 
-**How to change your script:**
-To run an NPT simulation at 300 K and 1 Atmosphere of pressure, replace the `fix` command with:
+:::{tip} Best Practices
+* **Always comment your input files** — explain what each section does
+* **Use descriptive variable names** for regions and fixes
+* **Start with short test runs** (1000 steps) before committing to long production runs
+* **Check energy conservation** before trusting results
+* **Keep a library of working input files** as templates for future projects
+:::
 
-```lammps
-# Apply the NPT integrator to all atoms
-# iso <start_P> <stop_P> <P_damp> controls uniform pressure in all directions
-# P_damp is usually 1000x the timestep
-fix             1 all npt temp 300.0 300.0 100.0 iso 1.0 1.0 1000.0
+---
 
-```
+## 15. Further Reading
 
-### Important Rule for NVT and NPT
+* **[LAMMPS Manual](https://docs.lammps.org/)** — The official documentation (searchable!)
+* **[Anvil LAMMPS Documentation](https://www.rcac.purdue.edu/knowledge/anvil/software/installing_applications/lammps/provided_module)** — Anvil-specific LAMMPS setup and modules
+* **[LAMMPS Tutorial: Argon](https://icme.hpc.msstate.edu/mediawiki/index.php/LAMMPS_Argon)** — Mississippi State tutorial
+* **[Molecular Dynamics with LAMMPS](https://lammpstutorials.github.io/)** — Community tutorials
+* **Frenkel & Smit, Chapter 4** — Reduced units and their conversions
 
-When running NVT or NPT, the system needs time to adjust to the thermostat and barostat. You must always run an **equilibration phase** before you start collecting your production data. For example:
-
-```lammps
-# 1. Equilibrate the system for 5,000 steps
-run             5000
-
-# 2. Reset the average thermodynamic counters to zero
-reset_timestep  0
-
-# 3. Run the production phase for 10,000 steps to collect data
-run             10000
-
-```
-
-
-```
+:::{warning} Units Matter!
+The most common mistake in LAMMPS is mixing unit systems. If you use `units real` (real-world units like Angstroms and kcal/mol), you **cannot** use reduced LJ parameters (epsilon=1, sigma=1). Always double-check your units are consistent throughout the input file.
+:::

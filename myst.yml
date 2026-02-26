@@ -14,6 +14,7 @@ project:
         - file: notes/04_atomic_view.md
         - file: notes/05_stat_mech.md
         - file: notes/06_mol_dyn.md
+        - file: notes/07_practical_MD.md
 
     # Part 2: Hands-on
     - title: Tutorials
@@ -25,8 +26,9 @@ project:
         - file: tutorials/05_stat_mech.md
         - file: tutorials/06_MD_run_using_py.md
         - file: tutorials/07_thermostats.md
-        #- file: tutorials/08_LAMMPS_sim.md
-        #- file: tutorials/09_Python_for_MD.md
+        - file: tutorials/08_LAMMPS_sim.md
+        - file: tutorials/09_Running_LAMMPS.md
+        - file: tutorials/10_Python_for_MD.md
   # 2. Ignore Rule: This prevents it from looking in venv ever again
   exclude:
     - venv
