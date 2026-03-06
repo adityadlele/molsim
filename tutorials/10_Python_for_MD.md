@@ -1,4 +1,4 @@
-# Tutorial 10: Analyzing LAMMPS Output with Python
+# Tutorial 9: Analyzing LAMMPS Output with Python
 
 **Objective:** Learn to process LAMMPS thermodynamic output files, detect equilibration, and calculate ensemble averages with proper uncertainty quantification.
 
@@ -1592,13 +1592,5 @@ If your running average never flattens out (continues drifting after 100,000+ st
 In these cases, advanced techniques (enhanced sampling, longer simulations, or different ensembles) are needed.
 :::
 
----
-
-## 15. Next Steps
-
-Now that you can analyze LAMMPS output:
-* **Midterm Exam Preparation:** Practice running simulations at different conditions and analyzing trends
-* **Advanced Analysis:** Learn to calculate radial distribution functions (RDF), mean squared displacement (MSD), and transport properties
-* **Visualization:** Use tools like OVITO or VMD to visualize trajectories
 
 This tutorial completes the core LAMMPS workflow: **Build** (Tutorial 7) → **Run** (Tutorial 8) → **Analyze** (Tutorial 9).
