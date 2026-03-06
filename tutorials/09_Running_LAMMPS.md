@@ -4,38 +4,30 @@
 
 :::{note} Prerequisites
 * Tutorial 2: Accessing Anvil
-* Tutorial 3: Linux Survival
-* Tutorial 7: LAMMPS Input Files
+* Tutorial 7: LAMMPS Input Files (you should have `argon.in` ready)
 * Active ACCESS account added to class allocation
 :::
 
----
-
-## 1. Why Use a Job Scheduler?
-
-On your laptop, you click "Run" and the program starts immediately. On a supercomputer shared by hundreds of researchers, this doesn't work. We need a **job scheduler** (also called a **workload manager**) to:
-
-1. **Queue jobs fairly** — First-come, first-served (with priority adjustments)
-2. **Allocate resources** — Assign specific nodes and cores to your job
-3. **Track usage** — Ensure you don't exceed your allocation quota
-4. **Manage conflicts** — Prevent two users from trying to use the same CPU
-
-Anvil uses **SLURM** (Simple Linux Utility for Resource Management), the most widely-used HPC scheduler in the world.
-
-:::{important} The Golden Rule
-**Never run heavy computations on the login node.**
-
-When you SSH into Anvil, you land on a "login node" — a shared machine used by everyone to prepare jobs. If you run a LAMMPS simulation there, it will:
-* Slow down everyone else's work
-* Get automatically killed by the system
-* Potentially get your account temporarily suspended
-
-Always use `sbatch` to submit jobs to the compute nodes.
+:::{important} In-Class Lab Activity
+This is a hands-on lab. We'll submit an actual job to the cluster together. Follow each step carefully and ask for help if stuck!
 :::
 
 ---
 
-## 2. The SLURM Workflow
+## 1. The Problem: Why Can't I Just Run LAMMPS?
+
+You might think: "I have `argon.in`, I loaded LAMMPS, why can't I just type `lmp -in argon.in` and walk away?"
+
+**Answer:** The login node is shared by everyone. If you run heavy calculations there:
+* ❌ You'll slow down everyone else
+* ❌ Your job will get killed automatically
+* ❌ Your account might get suspended
+
+**Solution:** Use the **job scheduler (SLURM)** to run on dedicated compute nodes.
+
+---
+
+## 2. How the Cluster Works
 
 ```text
 ┌─────────────────┐
@@ -44,185 +36,902 @@ Always use `sbatch` to submit jobs to the compute nodes.
          │ SSH
          ↓
 ┌─────────────────┐
-│  Login Node     │  ← You write/edit files here
-│  (Shared)       │  ← Never run simulations here!
+│  Login Node     │  ← You are here (writing files)
+│  (Shared)       │  ← DON'T run simulations here!
 └────────┬────────┘
-         │ sbatch job.sh
+         │ sbatch script.sh
          ↓
 ┌─────────────────┐
-│  SLURM Queue    │  ← Job waits for available resources
+│  SLURM Queue    │  ← Your job waits its turn
 └────────┬────────┘
-         │ Job starts
+         │ Resources available
          ↓
 ┌─────────────────┐
 │  Compute Node   │  ← Simulation runs here
-│  (Exclusive)    │  ← You have dedicated cores
+│  (Your cores)   │  ← You have exclusive access
 └────────┬────────┘
          │ Job completes
          ↓
 ┌─────────────────┐
-│  Output Files   │  ← Results written to $SCRATCH
+│  Output Files   │  ← Results appear in your directory
 └─────────────────┘
 ```
 
 ---
 
-## 3. Understanding SLURM Partitions
+## 3. Step-by-Step: Submitting Jobs from Your Folder Structure
 
-Anvil divides compute nodes into **partitions** (queues) based on job size and duration.
+In Tutorial 7, you created organized folders with 5 different simulations. Now we'll submit them as jobs.
 
-| Partition | Max Nodes | Max Time | Cores/Node | Use Case |
-|-----------|-----------|----------|------------|----------|
-| `shared` | 1 (partial) | 48 hours | 128 | Small jobs (testing, short runs) |
-| `standard` | 1-25 | 48 hours | 128 | Medium jobs (most production runs) |
-| `wide` | 26-100 | 48 hours | 128 | Large parallel jobs |
-| `debug` | 1-4 | 30 minutes | 128 | Quick tests (highest priority) |
+### Overview: What We're Submitting
 
-For this class, you'll primarily use **`shared`** and **`standard`**.
+```text
+lammps_tutorial/
+├── NVT_simulations/
+│   ├── T_300K/     → Job 1
+│   ├── T_500K/     → Job 2
+│   └── T_700K/     → Job 3
+└── NPT_simulations/
+    ├── P_1atm/     → Job 4
+    └── P_10atm/    → Job 5
+```
 
-:::{seealso}
-Full documentation: [Anvil Queue Policies](https://www.rcac.purdue.edu/knowledge/anvil/run/queues)
-:::
+We'll submit **5 separate jobs** (one per folder). Each runs independently on different compute nodes.
 
 ---
 
-## 4. Anatomy of a SLURM Batch Script
+## 4. Creating Submission Scripts
 
-A SLURM script is a regular bash script with special directives at the top. These directives start with `#SBATCH` and tell SLURM what resources you need.
+### Strategy: One Script Per Simulation
 
-### 4.1 The Template
+Each folder needs its own submission script that:
+1. Navigates to the correct folder
+2. Runs the specific input file
+3. Saves output in that folder
+
+### Step 1: Submit the First NVT Job (T=300K)
+
+```bash
+cd $SCRATCH/lammps_tutorial/NVT_simulations/T_300K
+nano submit.sh
+```
+
+**Paste this script:**
 
 ```bash
 #!/bin/bash
-#SBATCH --job-name=argon_md          # Job name (shows in queue)
-#SBATCH --account=chm250117          # Class allocation ID
-#SBATCH --partition=shared           # Which queue to use
-#SBATCH --nodes=1                    # Number of compute nodes
-#SBATCH --ntasks-per-node=4          # Number of MPI tasks (cores) per node
-#SBATCH --time=02:00:00              # Max runtime (HH:MM:SS)
-#SBATCH --output=job_%j.out          # Standard output (%j = job ID)
-#SBATCH --error=job_%j.err           # Standard error
-#SBATCH --mail-type=END,FAIL         # Email when job ends or fails
-#SBATCH --mail-user=your_email@rowan.edu
+#SBATCH --job-name=NVT_300K
+#SBATCH --account=chm250117
+#SBATCH --partition=shared
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=4
+#SBATCH --time=00:30:00
+#SBATCH --output=job_%j.out
+#SBATCH --error=job_%j.err
 
-# ========================================
-# SECTION 1: ENVIRONMENT SETUP
-# ========================================
-module purge                         # Clear any loaded modules
+echo "========================================="
+echo "Job: NVT at 300K"
+echo "Started: $(date)"
+echo "Directory: $(pwd)"
+echo "========================================="
+
+# Load LAMMPS
+module purge
 module load gcc/11.2.0 openmpi/4.0.6
 module load lammps/20210310
 
-# Print job info to output file
-echo "Job started at: $(date)"
-echo "Running on node: $(hostname)"
-echo "Job ID: $SLURM_JOB_ID"
-echo "Working directory: $(pwd)"
+# Run simulation
+lmp -in argon_300K.in
 
-# ========================================
-# SECTION 2: CHANGE TO WORKING DIRECTORY
-# ========================================
-cd $SLURM_SUBMIT_DIR
-
-# ========================================
-# SECTION 3: RUN THE SIMULATION
-# ========================================
-lmp -in argon.in
-
-# ========================================
-# SECTION 4: CLEANUP AND DIAGNOSTICS
-# ========================================
-echo "Job completed at: $(date)"
+echo "========================================="
+echo "Completed: $(date)"
+echo "========================================="
 ```
 
-### 4.2 Key Directives Explained
+Save: `Ctrl+O`, `Enter`, `Ctrl+X`
 
-| Directive | Purpose | Example |
-|-----------|---------|---------|
-| `--job-name` | Human-readable name for queue | `argon_500K_nvt` |
-| `--account` | Allocation project ID | `chm250117` |
-| `--partition` | Which queue to submit to | `shared` or `standard` |
-| `--nodes` | Number of compute nodes | `1` (typical for MD) |
-| `--ntasks-per-node` | CPU cores to use | `4` to `128` |
-| `--time` | Max walltime (auto-killed after) | `02:00:00` = 2 hours |
-| `--output` | Where to save stdout | `%j` = job ID |
-| `--error` | Where to save stderr | `%j` = job ID |
-| `--mail-type` | Email notifications | `BEGIN,END,FAIL` |
-
-:::{warning} Time Limit
-If your job exceeds the `--time` limit, it will be **killed immediately** without saving state. Always add a 10-20% buffer. For example, if you estimate 5 hours, request 6 hours.
-:::
-
----
-
-## 5. Step-by-Step: Submitting Your First Job
-
-### 5.1 Prepare Your Files
-
-1. **Log in to Anvil** (via SSH or Open OnDemand terminal)
-2. **Navigate to your scratch space:**
-   ```bash
-   cd $SCRATCH
-   mkdir lammps_tutorial
-   cd lammps_tutorial
-   ```
-
-3. **Copy your LAMMPS input file:**
-   ```bash
-   nano argon.in
-   ```
-   Paste the input file from Tutorial 7, then save (`Ctrl+O`, `Enter`, `Ctrl+X`).
-
-### 5.2 Create the Submission Script
-
+**Submit the job:**
 ```bash
-nano submit_argon.sh
+sbatch submit.sh
 ```
 
-Paste this script (replace `ACCOUNT_NAME` with your actual allocation):
+You'll see:
+```text
+Submitted batch job 123456
+```
+
+**Check it's running:**
+```bash
+squeue -u $USER
+```
+
+### Step 2: Submit Remaining NVT Jobs
+
+**For T=500K:**
+```bash
+cd ../T_500K
+nano submit.sh
+```
+
+Same script, but change:
+```bash
+#SBATCH --job-name=NVT_500K
+echo "Job: NVT at 500K"
+lmp -in argon_500K.in
+```
+
+Submit:
+```bash
+sbatch submit.sh
+```
+
+**For T=700K:**
+```bash
+cd ../T_700K
+nano submit.sh
+```
+
+Change:
+```bash
+#SBATCH --job-name=NVT_700K
+echo "Job: NVT at 700K"
+lmp -in argon_700K.in
+```
+
+Submit:
+```bash
+sbatch submit.sh
+```
+
+### Step 3: Submit NPT Jobs
+
+**For P=1atm:**
+```bash
+cd ../../NPT_simulations/P_1atm
+nano submit.sh
+```
 
 ```bash
 #!/bin/bash
-#SBATCH --job-name=argon_tutorial
+#SBATCH --job-name=NPT_1atm
 #SBATCH --account=chm250117
 #SBATCH --partition=shared
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=4
 #SBATCH --time=01:00:00
-#SBATCH --output=argon_%j.out
-#SBATCH --error=argon_%j.err
-#SBATCH --mail-type=END,FAIL
-#SBATCH --mail-user=your_email@rowan.edu
+#SBATCH --output=job_%j.out
+#SBATCH --error=job_%j.err
 
-# Load LAMMPS modules
+echo "========================================="
+echo "Job: NPT at 1 atm"
+echo "Started: $(date)"
+echo "========================================="
+
 module purge
 module load gcc/11.2.0 openmpi/4.0.6
 module load lammps/20210310
 
-# Print diagnostics
-echo "========================================="
-echo "Job started: $(date)"
-echo "Running on: $(hostname)"
-echo "Job ID: $SLURM_JOB_ID"
-echo "Cores requested: $SLURM_NTASKS"
-echo "========================================="
-
-# Run LAMMPS
-lmp -in argon.in
+lmp -in argon_npt_1atm.in
 
 echo "========================================="
-echo "Job completed: $(date)"
+echo "Completed: $(date)"
 echo "========================================="
 ```
 
-Save the file.
+Submit:
+```bash
+sbatch submit.sh
+```
 
-### 5.3 Submit the Job
+**For P=10atm:**
+```bash
+cd ../P_10atm
+nano submit.sh
+```
+
+Change:
+```bash
+#SBATCH --job-name=NPT_10atm
+echo "Job: NPT at 10 atm"
+lmp -in argon_npt_10atm.in
+```
+
+Submit:
+```bash
+sbatch submit.sh
+```
+
+---
+
+## 5. Monitoring All Your Jobs
+
+**Check all 5 jobs:**
+```bash
+squeue -u $USER
+```
+
+You should see:
+```text
+JOBID    PARTITION  NAME       USER      ST  TIME  NODES
+123456   shared     NVT_300K   username  R   0:02  1
+123457   shared     NVT_500K   username  R   0:01  1
+123458   shared     NVT_700K   username  PD  0:00  1
+123459   shared     NPT_1atm   username  R   0:01  1
+123460   shared     NPT_10atm  username  PD  0:00  1
+```
+
+**Status meanings:**
+* `R` = Running
+* `PD` = Pending (waiting for resources)
+
+**Watch live updates:**
+```bash
+watch -n 5 squeue -u $USER
+```
+
+Press `Ctrl+C` to stop.
+
+:::{tip} Cluster Limits
+The `shared` partition allows multiple small jobs simultaneously. All 5 might run at once, or some might wait if the cluster is busy.
+:::
+
+---
+
+## 6. Collecting Results
+
+After all jobs complete (5-15 minutes), check each folder for output.
+
+### Step 1: Quick Check All Folders
+
+```bash
+cd $SCRATCH/lammps_tutorial
+
+# Check NVT results
+ls NVT_simulations/T_300K/
+ls NVT_simulations/T_500K/
+ls NVT_simulations/T_700K/
+
+# Check NPT results
+ls NPT_simulations/P_1atm/
+ls NPT_simulations/P_10atm/
+```
+
+Each folder should now contain:
+```text
+submit.sh
+argon_*.in
+job_*.out
+job_*.err
+thermo_*.out         ← Temperature/energy data
+argon_*.lammpstrj    ← Trajectory
+final_*.data         ← Final state
+log.lammps
+```
+
+### Step 2: Verify Successful Completion
+
+**Check job outputs:**
+```bash
+cd NVT_simulations/T_300K
+tail -5 job_*.out
+```
+
+Look for:
+```text
+=========================================
+Completed: [timestamp]
+=========================================
+```
+
+**Check for errors:**
+```bash
+cat job_*.err
+```
+
+Should be empty. If not, read the error message!
+
+### Step 3: Quick Look at Results
+
+**Temperature data for 300K:**
+```bash
+head -20 thermo_300K.out
+```
+
+You should see temperatures fluctuating around 2.50 (target).
+
+**Compare all three NVT temperatures:**
+```bash
+cd $SCRATCH/lammps_tutorial/NVT_simulations
+
+# Extract average temperatures (after equilibration)
+tail -100 T_300K/thermo_300K.out | awk '{sum+=$2; count++} END {print "T_300K avg:", sum/count}'
+tail -100 T_500K/thermo_500K.out | awk '{sum+=$2; count++} END {print "T_500K avg:", sum/count}'
+tail -100 T_700K/thermo_700K.out | awk '{sum+=$2; count++} END {print "T_700K avg:", sum/count}'
+```
+
+:::{note} What You Should See
+The average temperatures should be close to your targets:
+* T_300K: ~2.50
+* T_500K: ~4.17
+* T_700K: ~5.84
+
+Small deviations (±0.05) are normal due to thermal fluctuations.
+:::
+
+---
+
+## 7. Advanced: Using a Loop to Submit Multiple Jobs
+
+**Pro tip:** Instead of submitting each job manually, use a bash loop.
+
+### Create All NVT Submission Scripts at Once
+
+```bash
+cd $SCRATCH/lammps_tutorial/NVT_simulations
+
+# Loop through temperature folders
+for temp_dir in T_300K T_500K T_700K; do
+    cd $temp_dir
+    
+    # Extract temperature from folder name (e.g., T_300K → 300K)
+    temp_label=${temp_dir#T_}
+    
+    # Create submission script
+    cat > submit.sh << EOF
+#!/bin/bash
+#SBATCH --job-name=NVT_${temp_label}
+#SBATCH --account=chm250117
+#SBATCH --partition=shared
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=4
+#SBATCH --time=00:30:00
+#SBATCH --output=job_%j.out
+#SBATCH --error=job_%j.err
+
+echo "Job: NVT at ${temp_label}"
+echo "Started: \$(date)"
+
+module purge
+module load gcc/11.2.0 openmpi/4.0.6
+module load lammps/20210310
+
+lmp -in argon_${temp_label}.in
+
+echo "Completed: \$(date)"
+EOF
+    
+    # Submit the job
+    sbatch submit.sh
+    
+    # Go back to parent directory
+    cd ..
+done
+```
+
+This creates and submits all 3 NVT jobs with one command!
+
+---
+
+## 8. What If a Job Failed?
+
+### Diagnosing Failures
+
+**Symptom 1: Job completes in < 5 seconds**
+
+Check error file:
+```bash
+cat job_*.err
+```
+
+**Common error:** "Cannot open input script"
+```text
+Fix: Check filename matches exactly
+ls -lh argon_*.in
+Make sure the filename in submit.sh matches
+```
+
+**Common error:** "lmp: command not found"
+```text
+Fix: Module loading failed
+Add these lines to your submit.sh:
+module purge
+module load gcc/11.2.0 openmpi/4.0.6
+module load lammps/20210310
+```
+
+**Symptom 2: Job runs but no thermo output**
+
+Check LAMMPS log:
+```bash
+tail -50 log.lammps
+```
+
+Look for ERROR messages.
+
+**Symptom 3: Job killed before completion**
+
+```bash
+tail job_*.out
+```
+
+Look for:
+```text
+slurmstepd: error: *** JOB CANCELLED AT [time] DUE TO TIME LIMIT ***
+```
+
+**Fix:** Increase time in `#SBATCH --time=01:00:00`
+
+### Resubmitting Failed Jobs
+
+```bash
+# Fix the problem (edit submit.sh or input file)
+nano submit.sh
+
+# Resubmit
+sbatch submit.sh
+```
+
+Old job output files won't be overwritten (they have unique job IDs).
+
+---
+
+## 9. Useful SLURM Commands
+
+| Command | Purpose |
+|---------|---------|
+| `squeue -u $USER` | Check your jobs |
+| `squeue -u $USER --start` | Estimated start times |
+| `scancel 123456` | Cancel specific job |
+| `scancel -u $USER` | Cancel ALL your jobs |
+| `scontrol show job 123456` | Detailed job info |
+| `sacct -j 123456` | Job history (after completion) |
+
+---
+
+## 10. Summary Checklist
+
+After this tutorial, you should have:
+
+- [ ] 5 folders each with a `submit.sh` script
+- [ ] Successfully submitted 5 jobs (3 NVT + 2 NPT)
+- [ ] All jobs completed without errors
+- [ ] `thermo_*.out` files in each folder
+- [ ] Understand how to check job status with `squeue`
+- [ ] Know how to diagnose job failures
+
+**File structure check:**
+```bash
+cd $SCRATCH/lammps_tutorial
+find . -name "thermo_*.out" | wc -l
+```
+
+Should output: `5` (one per simulation)
+
+**Next Tutorial:** Analyzing these results with Python (Tutorial 9)
+
+---
+
+## 11. Quick Reference
+
+**Submit job from any folder:**
+```bash
+sbatch submit.sh
+```
+
+**Check all your running jobs:**
+```bash
+squeue -u $USER
+```
+
+**Cancel a stuck job:**
+```bash
+scancel JOB_ID
+```
+
+**Check if job finished successfully:**
+```bash
+tail -5 job_*.out
+# Should see "Completed: [timestamp]"
+```
+
+**View real-time progress:**
+```bash
+tail -f thermo_*.out
+# Press Ctrl+C to stop
+```
+
+---
+
+## 12. Class Examples
+
+Complete working examples available:
+```bash
+ls /anvil/projects/x-chm250117/class_examples/
+```
+
+If you need to start fresh:
+```bash
+cd $SCRATCH
+rm -rf lammps_tutorial
+cp -r /anvil/projects/x-chm250117/class_examples/lammps_tutorial ./
+```
+
+---
+
+## 13. Further Reading
+
+* **[Anvil User Guide](https://www.rcac.purdue.edu/knowledge/anvil/run)** — Complete SLURM documentation
+* **[Anvil LAMMPS](https://www.rcac.purdue.edu/knowledge/anvil/software/installing_applications/lammps/provided_module)** — LAMMPS on Anvil
+* **[SLURM Commands](https://slurm.schedmd.com/pdfs/summary.pdf)** — Quick reference PDF
+
+Let's submit the Argon simulation from Tutorial 7.
+
+### Step 1: Make Sure You Have Your Input File
+
+```bash
+cd $SCRATCH/lammps_tutorial
+ls -lh argon.in
+```
+
+You should see your `argon.in` file. If not, go back to Tutorial 7!
+
+### Step 2: Create a Submission Script
+
+A **submission script** is a text file that tells SLURM:
+* What resources you need (cores, time, memory)
+* What commands to run
+
+Create the script:
+```bash
+nano submit_argon.sh
+```
+
+### Step 3: Copy This Script
+
+**Paste the following into nano** (carefully!):
+
+```bash
+#!/bin/bash
+#SBATCH --job-name=my_first_job
+#SBATCH --account=chm250117
+#SBATCH --partition=shared
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=4
+#SBATCH --time=00:30:00
+#SBATCH --output=job_%j.out
+#SBATCH --error=job_%j.err
+
+# Print job info
+echo "========================================="
+echo "Job started: $(date)"
+echo "Running on node: $(hostname)"
+echo "Job ID: $SLURM_JOB_ID"
+echo "========================================="
+
+# Load LAMMPS
+module purge
+module load gcc/11.2.0 openmpi/4.0.6
+module load lammps/20210310
+
+# Run the simulation
+lmp -in argon.in
+
+echo "========================================="
+echo "Job finished: $(date)"
+echo "========================================="
+```
+
+**Save and exit:** `Ctrl+O`, `Enter`, `Ctrl+X`
+
+### Step 4: Understand What You Just Wrote
+
+The lines starting with `#SBATCH` are **directives** (instructions to SLURM):
+
+| Line | Meaning |
+|------|---------|
+| `--job-name=my_first_job` | Name shown in queue |
+| `--account=chm250117` | Class allocation ID |
+| `--partition=shared` | Which queue (shared = small jobs) |
+| `--nodes=1` | Use 1 compute node |
+| `--ntasks-per-node=4` | Use 4 CPU cores |
+| `--time=00:30:00` | Max 30 minutes (HH:MM:SS) |
+| `--output=job_%j.out` | Save output (
+
+%j = job ID) |
+| `--error=job_%j.err` | Save errors separately |
+
+### Step 5: Submit Your Job
 
 ```bash
 sbatch submit_argon.sh
 ```
 
+You'll see:
+```text
+Submitted batch job 123456
+```
+
+**That number is your Job ID!** Write it down.
+
+### Step 6: Check If It's Running
+
+```bash
+squeue -u $USER
+```
+
+Output:
+```text
+JOBID    PARTITION  NAME          USER      ST  TIME  NODES
+123456   shared     my_first_job  username  R   0:02  1
+```
+
+**Status codes:**
+* `PD` = Pending (waiting in queue)
+* `R` = Running  ← Your job is active!
+* `CG` = Completing
+* (No output) = Job finished
+
+**Refresh every few seconds:**
+```bash
+watch -n 5 squeue -u $USER
+```
+
+Press `Ctrl+C` to stop watching.
+
+### Step 7: Wait for Completion
+
+Your job will take ~5-10 minutes. When `squeue` shows nothing, it's done!
+
+### Step 8: Check the Results
+
+```bash
+ls -lh
+```
+
 You should see:
+```text
+argon.in
+submit_argon.sh
+job_123456.out         ← Job log
+job_123456.err         ← Errors (should be empty)
+thermo.out             ← Temperature/energy data
+argon.lammpstrj        ← Trajectory
+final_state.data       ← Final configuration
+```
+
+**Look at the job output:**
+```bash
+cat job_123456.out
+```
+
+You should see your echo messages plus LAMMPS output.
+
+**Check for errors:**
+```bash
+cat job_123456.err
+```
+
+If this file is empty, everything worked!
+
+---
+
+## 4. What If It Didn't Work?
+
+### Problem 1: "Submitted batch job" but nothing happens
+
+**Check:** Is your job stuck in the queue?
+```bash
+squeue -u $USER
+```
+
+If status is `PD` (pending) for >5 minutes, the cluster might be busy. Be patient.
+
+### Problem 2: Job finishes immediately (< 1 second)
+
+**Check the error file:**
+```bash
+cat job_*.err
+```
+
+**Common errors:**
+
+**"lmp: command not found"**
+```text
+FIX: Check your module load commands. Make sure you have:
+module load gcc/11.2.0 openmpi/4.0.6
+module load lammps/20210310
+```
+
+**"Cannot open input script argon.in"**
+```text
+FIX: LAMMPS can't find your input file.
+Check: ls -lh argon.in
+Make sure argon.in is in the same directory as submit_argon.sh
+```
+
+**"Invalid command" or "Unknown command"**
+```text
+FIX: Typo in your LAMMPS input file.
+Open argon.in and check for spelling mistakes.
+```
+
+### Problem 3: Job runs but no output files
+
+**Check:** Did the job actually finish?
+```bash
+tail -20 job_*.out
+```
+
+Look for "Job completed" at the end. If you don't see it, the job was killed (probably hit time limit).
+
+---
+
+## 5. Useful SLURM Commands
+
+| Command | What It Does | Example |
+|---------|--------------|---------|
+| `sbatch script.sh` | Submit a job | `sbatch submit_argon.sh` |
+| `squeue -u $USER` | Check your jobs | See what's running |
+| `scancel 123456` | Cancel job 123456 | `scancel 123456` |
+| `scancel -u $USER` | Cancel ALL your jobs | Use with caution! |
+| `scontrol show job 123456` | Detailed job info | Why is it pending? |
+
+---
+
+## 6. Running Longer Jobs
+
+For production runs (hours to days), modify the script:
+
+```bash
+nano submit_production.sh
+```
+
+```bash
+#!/bin/bash
+#SBATCH --job-name=argon_production
+#SBATCH --account=chm250117
+#SBATCH --partition=standard          ← Use 'standard' for longer jobs
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=8           ← More cores for speed
+#SBATCH --time=24:00:00               ← 24 hours
+#SBATCH --output=prod_%j.out
+
+module purge
+module load gcc/11.2.0 openmpi/4.0.6
+module load lammps/20210310
+
+# Run from SCRATCH for fast I/O
+cd $SCRATCH/lammps_tutorial
+
+# Run with MPI for parallel execution
+mpirun -np $SLURM_NTASKS lmp -in argon.in
+
+echo "Production run complete"
+```
+
+---
+
+## 7. Exercise: Run at Different Temperature
+
+**Challenge:** Submit TWO jobs running Argon at 300 K and 700 K simultaneously.
+
+<details>
+<summary>Hint</summary>
+
+You need:
+1. Two input files: `argon_300K.in` and `argon_700K.in`
+2. Two submission scripts: `submit_300K.sh` and `submit_700K.sh`
+
+Make sure the output filenames are different in each!
+</details>
+
+<details>
+<summary>Solution</summary>
+
+```bash
+# Create 300K version
+cp argon.in argon_300K.in
+nano argon_300K.in
+# Change: velocity all create 2.50 ... and fix nvt temp 2.50 2.50 ...
+# Change: log thermo_300K.out
+
+# Create 700K version  
+cp argon.in argon_700K.in
+nano argon_700K.in
+# Change: velocity all create 5.84 ... and fix nvt temp 5.84 5.84 ...
+# Change: log thermo_700K.out
+
+# Create submission scripts
+cp submit_argon.sh submit_300K.sh
+nano submit_300K.sh
+# Change: lmp -in argon_300K.in
+
+cp submit_argon.sh submit_700K.sh
+nano submit_700K.sh
+# Change: lmp -in argon_700K.in
+
+# Submit both!
+sbatch submit_300K.sh
+sbatch submit_700K.sh
+
+# Check both are running
+squeue -u $USER
+```
+</details>
+
+---
+
+## 8. Class Examples
+
+Pre-made scripts are available:
+```bash
+ls /anvil/projects/x-chm250117/class_examples/
+```
+
+Copy a complete example:
+```bash
+cp /anvil/projects/x-chm250117/class_examples/submit_argon.sh ./
+cp /anvil/projects/x-chm250117/class_examples/argon_nvt.in ./
+```
+
+---
+
+## 9. Summary Checklist
+
+After this lab, you should have:
+
+- [ ] Created a SLURM submission script
+- [ ] Successfully submitted a job with `sbatch`
+- [ ] Monitored job status with `squeue`
+- [ ] Retrieved output files (`thermo.out`, etc.)
+- [ ] Understand what each `#SBATCH` directive does
+
+**Next Tutorial:** Analyzing LAMMPS output with Python (Tutorial 9)
+
+---
+
+## 10. Quick Reference Card
+
+**Essential commands:**
+```bash
+# Submit job
+sbatch script.sh
+
+# Check status
+squeue -u $USER
+
+# Cancel job
+scancel JOB_ID
+
+# View output (while running)
+tail -f job_*.out
+
+# Check errors
+cat job_*.err
+```
+
+**Job script template:**
+```bash
+#!/bin/bash
+#SBATCH --account=chm250117
+#SBATCH --partition=shared
+#SBATCH --time=00:30:00
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=4
+
+module load gcc/11.2.0 openmpi/4.0.6
+module load lammps/20210310
+
+lmp -in input.in
+```
+
+---
+
+## 11. Further Reading
+
+* **[Anvil User Guide](https://www.rcac.purdue.edu/knowledge/anvil/run)** — Running jobs
+* **[Anvil LAMMPS Documentation](https://www.rcac.purdue.edu/knowledge/anvil/software/installing_applications/lammps/provided_module)** — LAMMPS on Anvil
+* **[SLURM Quick Start](https://slurm.schedmd.com/quickstart.html)** — Official SLURM guide
 ```text
 Submitted batch job 123456
 ```

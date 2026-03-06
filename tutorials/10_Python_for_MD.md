@@ -35,9 +35,579 @@ This tutorial will teach you to avoid both.
 
 ---
 
-## 2. Preparing the Simulations
+## 2. Preparing Your Data
 
-Before we can analyze, we need data. We'll run **two simulations** to demonstrate the impact of equilibration.
+In Tutorial 8, you submitted 5 simulations:
+* 3 NVT simulations (300K, 500K, 700K)
+* 2 NPT simulations (1 atm, 10 atm)
+
+Each should have produced a `thermo_*.out` file. We'll analyze these results.
+
+### Step 1: Verify All Simulations Completed
+
+```bash
+cd $SCRATCH/lammps_tutorial
+
+# Check NVT outputs
+ls -lh NVT_simulations/T_*/thermo_*.out
+
+# Check NPT outputs
+ls -lh NPT_simulations/P_*/thermo_*.out
+```
+
+You should see 5 files total. If any are missing, that job didn't finish — go back to Tutorial 8 to troubleshoot.
+
+### Step 2: Understanding What We'll Analyze
+
+We'll answer these questions:
+1. **Did each simulation equilibrate?** (Temperature/pressure reached steady state)
+2. **What are the average properties?** (Mean temperature, pressure, density)
+3. **How do properties change with temperature?** (Compare 300K vs 500K vs 700K)
+4. **How does NPT differ from NVT?** (Volume changes in NPT)
+
+:::{important} Why This Matters
+In real research, you'll run dozens of simulations. You need to:
+* Identify which runs are usable (equilibrated)
+* Calculate properties with proper uncertainty
+* Compare trends across conditions
+:::
+
+---
+
+## 3. Launching Jupyter for Analysis
+
+### 3.1 Start Jupyter Session
+
+1. Go to [Anvil OnDemand](https://ondemand.anvil.rcac.purdue.edu)
+2. Click **Interactive Apps** → **Jupyter Notebook**
+3. Settings:
+   * Account: `chm250117`
+   * Partition: `shared`
+   * Number of hours: `2`
+4. Launch and connect
+
+### 3.2 Navigate to Your Data
+
+In Jupyter, click **New** → **Terminal**, then:
+```bash
+cd $SCRATCH/lammps_tutorial
+```
+
+Close the terminal.
+
+### 3.3 Create Analysis Notebook
+
+In Jupyter file browser:
+1. Navigate to `lammps_tutorial`
+2. Click **New** → **Python [conda env: molsimclass]**
+3. Rename notebook to `LAMMPS_Analysis.ipynb`
+
+:::{tip} Using Class Examples
+Sample output files are in:
+```bash
+/anvil/projects/x-chm250117/class_examples/
+```
+You can copy these to practice if your simulations haven't finished.
+:::
+
+---
+
+## 4. Loading and Parsing LAMMPS Output
+
+### 4.1 Understanding `thermo.out` Format
+
+Open any `thermo_*.out` file (File browser → double-click):
+
+```text
+LAMMPS (10 Mar 2021)
+...
+Step Temp Press PotEng KinEng TotEng Density 
+0 2.5000000 10.012345 -2.6604462 3.7481250 1.0876788 0.8000000 
+100 2.4234567 9.6123456 -2.5432198 3.6334567 1.0902369 0.8000000 
+...
+```
+
+The file has:
+* Header lines (starting with LAMMPS, #)
+* Column names (Step Temp Press...)
+* Data rows (numerical values)
+
+### 4.2 Python: Generic Loading Function
+
+**Cell 1: Import Libraries**
+
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+from scipy import stats
+import os
+
+# Configure plotting
+plt.style.use('seaborn-v0_8-whitegrid')
+plt.rcParams['figure.figsize'] = (12, 5)
+plt.rcParams['font.size'] = 11
+
+print("Libraries loaded successfully")
+```
+
+**Cell 2: Parse LAMMPS Output**
+
+```python
+def load_lammps_thermo(filename):
+    """
+    Parse LAMMPS thermo output file.
+    
+    Parameters
+    ----------
+    filename : str
+        Path to thermo.out file
+    
+    Returns
+    -------
+    pandas.DataFrame
+        Thermodynamic data with columns as headers
+    """
+    import re
+    
+    with open(filename, 'r') as f:
+        lines = f.readlines()
+    
+    # Find the line with column headers (contains "Step")
+    header_idx = None
+    for i, line in enumerate(lines):
+        # Look for line that starts with "Step" (case sensitive)
+        if re.match(r'^\s*Step\s+', line):
+            header_idx = i
+            break
+    
+    if header_idx is None:
+        raise ValueError(f"Could not find header line starting with 'Step' in {filename}")
+    
+    # Extract header - split by whitespace
+    header = lines[header_idx].strip().split()
+    num_cols = len(header)
+    
+    print(f"Found {num_cols} columns: {header}")
+    
+    # Extract data lines starting immediately after header
+    data_lines = []
+    for line in lines[header_idx + 1:]:
+        stripped = line.strip()
+        
+        # Stop at "Loop time" or other end markers
+        if (not stripped or 
+            stripped.startswith('Loop') or
+            stripped.startswith('WARNING') or
+            stripped.startswith('Performance')):
+            break
+            
+        # Skip comment lines
+        if stripped.startswith('#'):
+            continue
+        
+        # Split the line
+        parts = stripped.split()
+        
+        # Only accept lines with correct number of columns
+        if len(parts) == num_cols:
+            data_lines.append(parts)
+        else:
+            print(f"Warning: Skipping line with {len(parts)} columns (expected {num_cols}): {stripped[:80]}")
+    
+    print(f"Loaded {len(data_lines)} data rows")
+    
+    # Create DataFrame
+    data = pd.DataFrame(data_lines, columns=header)
+    
+    # Convert all columns to numeric
+    for col in data.columns:
+        data[col] = pd.to_numeric(data[col], errors='coerce')
+    
+    # Check for NaN values
+    nan_counts = data.isna().sum()
+    if nan_counts.any():
+        print(f"Warning: Found NaN values in columns: {nan_counts[nan_counts > 0].to_dict()}")
+    
+    return data
+
+print("Loading function defined")
+```
+
+---
+
+## 5. Loading All Your Simulations
+
+**Cell 3: Load All NVT Data**
+
+```python
+# Define base directory
+base_dir = "/anvil/scratch/x-USERNAME/lammps_tutorial"  # Replace USERNAME!
+
+# Load NVT simulations
+nvt_300K = load_lammps_thermo(f"{base_dir}/NVT_simulations/T_300K/thermo_300K.out")
+nvt_500K = load_lammps_thermo(f"{base_dir}/NVT_simulations/T_500K/thermo_500K.out")
+nvt_700K = load_lammps_thermo(f"{base_dir}/NVT_simulations/T_700K/thermo_700K.out")
+
+print("NVT Data Loaded:")
+print(f"  300K: {len(nvt_300K)} steps")
+print(f"  500K: {len(nvt_500K)} steps")
+print(f"  700K: {len(nvt_700K)} steps")
+
+# Check available columns
+print("\nAvailable columns in data:")
+print(list(nvt_500K.columns))
+
+# Quick look at 500K data
+print("\nFirst 5 rows of 500K simulation:")
+print(nvt_500K.head())
+```
+
+**Cell 4: Load NPT Data**
+
+```python
+# Load NPT simulations
+npt_1atm = load_lammps_thermo(f"{base_dir}/NPT_simulations/P_1atm/thermo_npt_1atm.out")
+npt_10atm = load_lammps_thermo(f"{base_dir}/NPT_simulations/P_10atm/thermo_npt_10atm.out")
+
+print("NPT Data Loaded:")
+print(f"  1 atm:  {len(npt_1atm)} steps")
+print(f"  10 atm: {len(npt_10atm)} steps")
+
+print("\nColumns in NPT data:")
+print(list(npt_1atm.columns))
+```
+
+:::{note} Finding Your Username
+If you don't know your username, run in a notebook cell:
+```python
+import os
+print(os.environ['USER'])
+```
+Then update `base_dir` above.
+:::
+
+---
+
+## 6. Visual Equilibration Detection
+
+**Cell 5: Plot All NVT Temperatures**
+
+```python
+fig, axes = plt.subplots(3, 1, figsize=(12, 10), sharex=True)
+
+# 300K
+axes[0].plot(nvt_300K['Step'], nvt_300K['Temp'], 
+             color='blue', alpha=0.7, lw=0.8)
+axes[0].axhline(300.0, color='red', linestyle='--', lw=2, label='Target T=300 K')
+axes[0].set_ylabel('Temperature (K)')
+axes[0].set_title('NVT at 300K')
+axes[0].legend()
+axes[0].grid(alpha=0.3)
+
+# 500K
+axes[1].plot(nvt_500K['Step'], nvt_500K['Temp'], 
+             color='orange', alpha=0.7, lw=0.8)
+axes[1].axhline(500.0, color='red', linestyle='--', lw=2, label='Target T=500 K')
+axes[1].set_ylabel('Temperature (K)')
+axes[1].set_title('NVT at 500K')
+axes[1].legend()
+axes[1].grid(alpha=0.3)
+
+# 700K
+axes[2].plot(nvt_700K['Step'], nvt_700K['Temp'], 
+             color='darkred', alpha=0.7, lw=0.8)
+axes[2].axhline(700.0, color='red', linestyle='--', lw=2, label='Target T=700 K')
+axes[2].set_ylabel('Temperature (K)')
+axes[2].set_xlabel('Step')
+axes[2].set_title('NVT at 700K')
+axes[2].legend()
+axes[2].grid(alpha=0.3)
+
+plt.suptitle('Temperature Evolution: All NVT Simulations', 
+             fontsize=14, fontweight='bold', y=1.0)
+plt.tight_layout()
+plt.show()
+
+print("Observation: All three should fluctuate around their targets")
+print("Check: Are they all roughly horizontal? (Equilibrated)")
+```
+
+---
+
+## 7. Calculating Ensemble Averages
+
+**Cell 6: Define Analysis Functions**
+
+```python
+def discard_equilibration(data, fraction=0.2):
+    """
+    Remove first fraction of data (equilibration phase).
+    
+    Parameters
+    ----------
+    data : DataFrame
+        Simulation data
+    fraction : float
+        Fraction to discard (default 0.2 = 20%)
+    
+    Returns
+    -------
+    DataFrame
+        Production data only
+    """
+    cutoff = int(len(data) * fraction)
+    return data.iloc[cutoff:].reset_index(drop=True)
+
+def block_average_uncertainty(data, n_blocks=10):
+    """
+    Calculate mean and uncertainty using block averaging.
+    
+    Parameters
+    ----------
+    data : array-like
+        Time series
+    n_blocks : int
+        Number of blocks
+    
+    Returns
+    -------
+    dict
+        Mean, standard error, and 95% confidence interval
+    """
+    n_total = len(data)
+    block_size = n_total // n_blocks
+    
+    block_means = []
+    for i in range(n_blocks):
+        start = i * block_size
+        end = (i + 1) * block_size if i < n_blocks - 1 else n_total
+        block_means.append(np.mean(data[start:end]))
+    
+    overall_mean = np.mean(block_means)
+    block_std = np.std(block_means, ddof=1)
+    standard_error = block_std / np.sqrt(n_blocks)
+    
+    # 95% confidence interval
+    t_critical = stats.t.ppf(0.975, df=n_blocks-1)
+    ci_95 = t_critical * standard_error
+    
+    return {
+        'mean': overall_mean,
+        'se': standard_error,
+        'ci_95': ci_95
+    }
+
+print("Analysis functions defined")
+```
+
+**Cell 7: Analyze All NVT Simulations**
+
+```python
+# Discard equilibration (first 20%)
+nvt_300K_prod = discard_equilibration(nvt_300K, 0.2)
+nvt_500K_prod = discard_equilibration(nvt_500K, 0.2)
+nvt_700K_prod = discard_equilibration(nvt_700K, 0.2)
+
+# Calculate average temperatures
+temp_300K = block_average_uncertainty(nvt_300K_prod['Temp'].values)
+temp_500K = block_average_uncertainty(nvt_500K_prod['Temp'].values)
+temp_700K = block_average_uncertainty(nvt_700K_prod['Temp'].values)
+
+# Calculate average pressures (LAMMPS uses 'Press' not 'Pressure')
+press_300K = block_average_uncertainty(nvt_300K_prod['Press'].values)
+press_500K = block_average_uncertainty(nvt_500K_prod['Press'].values)
+press_700K = block_average_uncertainty(nvt_700K_prod['Press'].values)
+
+print("="*70)
+print("NVT SIMULATION RESULTS (After Discarding Equilibration)")
+print("="*70)
+
+print("\nTemperature:")
+print(f"  300K: T = {temp_300K['mean']:.2f} ± {temp_300K['ci_95']:.2f} K  (Target: 300 K)")
+print(f"  500K: T = {temp_500K['mean']:.2f} ± {temp_500K['ci_95']:.2f} K  (Target: 500 K)")
+print(f"  700K: T = {temp_700K['mean']:.2f} ± {temp_700K['ci_95']:.2f} K  (Target: 700 K)")
+
+print("\nPressure:")
+print(f"  300K: P = {press_300K['mean']:.1f} ± {press_300K['ci_95']:.1f} atm")
+print(f"  500K: P = {press_500K['mean']:.1f} ± {press_500K['ci_95']:.1f} atm")
+print(f"  700K: P = {press_700K['mean']:.1f} ± {press_700K['ci_95']:.1f} atm")
+
+print("\nObservation: Pressure increases with temperature (Ideal Gas Law!)")
+print("At constant volume (NVT), P ∝ T for ideal gases")
+```
+
+---
+
+## 8. Comparing NVT vs NPT
+
+**Cell 8: Analyze NPT Density Evolution**
+
+```python
+fig, axes = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
+
+# 1 atm
+axes[0].plot(npt_1atm['Step'], npt_1atm['Density'], 
+             color='steelblue', alpha=0.7, lw=0.8)
+axes[0].axhline(0.8, color='gray', linestyle=':', lw=2, label='Initial ρ*=0.8')
+axes[0].set_ylabel('Density (ρ*)')
+axes[0].set_title('NPT at 1 atm: Density Evolution')
+axes[0].legend()
+axes[0].grid(alpha=0.3)
+
+# 10 atm
+axes[1].plot(npt_10atm['Step'], npt_10atm['Density'], 
+             color='darkorange', alpha=0.7, lw=0.8)
+axes[1].axhline(0.8, color='gray', linestyle=':', lw=2, label='Initial ρ*=0.8')
+axes[1].set_ylabel('Density (ρ*)')
+axes[1].set_xlabel('Step')
+axes[1].set_title('NPT at 10 atm: Density Evolution')
+axes[1].legend()
+axes[1].grid(alpha=0.3)
+
+plt.tight_layout()
+plt.show()
+
+print("Key observation:")
+print("  - Density changes over time (box volume adjusting)")
+print("  - Higher pressure → Higher density")
+print("  - In NVT, density was always 0.8 (constant volume)")
+```
+
+**Cell 9: Calculate NPT Average Densities**
+
+```python
+# Discard equilibration (first 30% for NPT - slower!)
+npt_1atm_prod = discard_equilibration(npt_1atm, 0.3)
+npt_10atm_prod = discard_equilibration(npt_10atm, 0.3)
+
+# Calculate properties
+density_1atm = block_average_uncertainty(npt_1atm_prod['Density'].values)
+density_10atm = block_average_uncertainty(npt_10atm_prod['Density'].values)
+
+pressure_1atm = block_average_uncertainty(npt_1atm_prod['Press'].values)
+pressure_10atm = block_average_uncertainty(npt_10atm_prod['Press'].values)
+
+print("="*70)
+print("NPT SIMULATION RESULTS")
+print("="*70)
+
+print("\nDensity:")
+print(f"  1 atm:  ρ = {density_1atm['mean']:.4f} ± {density_1atm['ci_95']:.4f} g/cm³")
+print(f"  10 atm: ρ = {density_10atm['mean']:.4f} ± {density_10atm['ci_95']:.4f} g/cm³")
+
+print("\nPressure (should match targets):")
+print(f"  1 atm:  P = {pressure_1atm['mean']:.2f} ± {pressure_1atm['ci_95']:.2f} atm  (Target: 1.0 atm)")
+print(f"  10 atm: P = {pressure_10atm['mean']:.2f} ± {pressure_10atm['ci_95']:.2f} atm  (Target: 10.0 atm)")
+
+print("\nConclusion: Higher pressure compresses the gas (increases density)")
+print("NPT allows the box to shrink/expand to maintain constant pressure")
+```
+
+---
+
+## 9. Creating a Summary Comparison
+
+**Cell 10: Summary Table and Plot**
+
+```python
+# Create summary DataFrame
+summary = pd.DataFrame({
+    'Simulation': ['NVT 300K', 'NVT 500K', 'NVT 700K', 'NPT 1atm', 'NPT 10atm'],
+    'T_target_K': [300, 500, 700, 500, 500],
+    'T_actual_K': [
+        temp_300K['mean'], temp_500K['mean'], temp_700K['mean'],
+        block_average_uncertainty(npt_1atm_prod['Temp'].values)['mean'],
+        block_average_uncertainty(npt_10atm_prod['Temp'].values)['mean']
+    ],
+    'P_avg_atm': [
+        press_300K['mean'], press_500K['mean'], press_700K['mean'],
+        pressure_1atm['mean'], pressure_10atm['mean']
+    ],
+    'Density_g_cm3': [
+        nvt_300K_prod['Density'].mean(),
+        nvt_500K_prod['Density'].mean(),
+        nvt_700K_prod['Density'].mean(),
+        density_1atm['mean'], density_10atm['mean']
+    ]
+})
+
+print("\nSUMMARY OF ALL SIMULATIONS")
+print("="*70)
+print(summary.to_string(index=False))
+
+# Save to CSV
+summary.to_csv('simulation_summary.csv', index=False)
+print("\nSaved to: simulation_summary.csv")
+```
+
+**Cell 11: Visualization - Temperature vs Pressure**
+
+```python
+fig, ax = plt.subplots(figsize=(10, 6))
+
+# NVT data
+temps_nvt = [temp_300K['mean'], temp_500K['mean'], temp_700K['mean']]
+press_nvt = [press_300K['mean'], press_500K['mean'], press_700K['mean']]
+press_err_nvt = [press_300K['ci_95'], press_500K['ci_95'], press_700K['ci_95']]
+
+ax.errorbar(temps_nvt, press_nvt, yerr=press_err_nvt,
+            fmt='o', markersize=10, capsize=5, capthick=2,
+            color='steelblue', label='NVT (constant volume)')
+
+# NPT data
+temps_npt = [
+    block_average_uncertainty(npt_1atm_prod['Temp'].values)['mean'],
+    block_average_uncertainty(npt_10atm_prod['Temp'].values)['mean']
+]
+press_npt = [pressure_1atm['mean'], pressure_10atm['mean']]
+
+ax.scatter(temps_npt, press_npt, s=150, marker='s',
+           color='darkorange', label='NPT (fixed P)', zorder=5)
+
+ax.set_xlabel('Temperature (K)', fontsize=13)
+ax.set_ylabel('Pressure (atm)', fontsize=13)
+ax.set_title('Temperature-Pressure Relationship for Argon', fontsize=15, fontweight='bold')
+ax.legend(fontsize=11)
+ax.grid(alpha=0.3)
+
+plt.tight_layout()
+plt.savefig('temp_vs_pressure.png', dpi=150)
+plt.show()
+
+print("Saved plot: temp_vs_pressure.png")
+print("\nPhysics check: For NVT at constant volume,")
+print("pressure increases linearly with temperature (Ideal Gas Law: P ∝ T)")
+print(f"\nPressure ratio 700K/300K = {press_700K['mean']/press_300K['mean']:.2f}")
+print(f"Temperature ratio 700K/300K = {700/300:.2f}")
+print("These should be approximately equal for ideal gas behavior!")
+```
+
+---
+
+## 10. Summary Checklist
+
+After this tutorial, you should have:
+
+- [ ] Loaded data from all 5 simulations
+- [ ] Identified equilibration visually
+- [ ] Calculated ensemble averages with uncertainties
+- [ ] Compared NVT behavior at different temperatures
+- [ ] Understood NPT density adjustment
+- [ ] Created summary table and plots
+
+**Files created:**
+* `LAMMPS_Analysis.ipynb` (your analysis notebook)
+* `simulation_summary.csv` (results table)
+* `temp_vs_pressure.png` (comparison plot)
+
+---
+
+## 11. Further Reading
+
+* **Frenkel & Smit, Chapter 4** — Error analysis in simulations
+* **Allen & Tildesley, Chapter 6** — Calculating properties from MD
+* **[Python Data Analysis](https://pandas.pydata.org/docs/)** — Pandas documentation
 
 ### 2.1 Setup Directory Structure
 
