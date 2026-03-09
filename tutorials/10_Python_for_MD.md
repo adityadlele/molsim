@@ -1,4 +1,4 @@
-# Tutorial 9: Analyzing LAMMPS Output with Python
+# Tutorial 10: Analyzing LAMMPS Output with Python
 
 **Objective:** Learn to process LAMMPS thermodynamic output files, detect equilibration, and calculate ensemble averages with proper uncertainty quantification.
 
