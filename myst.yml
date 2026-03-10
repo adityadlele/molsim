@@ -15,6 +15,8 @@ project:
         - file: notes/05_stat_mech.md
         - file: notes/06_mol_dyn.md
         - file: notes/07_practical_MD.md
+        - file: notes/08_classical_potentials.md
+        - file: notes/09_advanced_potentials.md
 
     # Part 2: Hands-on
     - title: Tutorials
@@ -29,6 +31,8 @@ project:
         - file: tutorials/08_LAMMPS_sim.md
         - file: tutorials/09_Running_LAMMPS.md
         - file: tutorials/10_Python_for_MD.md
+        - file: tutorials/11_basic_potentials.md
+        - file: tutorials/12_advanced_potentials.md
   # 2. Ignore Rule: This prevents it from looking in venv ever again
   exclude:
     - venv
