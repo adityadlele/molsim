@@ -909,6 +909,14 @@ In a covalent bond between different elements, electrons are not shared equally:
   - H: q = +0.41 e (each)
   - Total: -0.82 + 2(0.41) = 0 (molecule is neutral)
 
+:::{important} Intramolecular vs. Intermolecular Electrostatics
+**Critical distinction:**
+- **Intramolecular** (within same molecule): O and H in the same water molecule are **bonded**. Force fields exclude Coulomb interactions between bonded atoms (1-2) and usually between atoms separated by one bond (1-3). The covalent bond potential handles these interactions.
+- **Intermolecular** (between molecules): H from one water and O from another water are **not bonded**. They interact via full Coulomb + LJ. This creates hydrogen bonds.
+
+In the examples below, we calculate **intermolecular** Coulomb energies—the electrostatic attraction between atoms in different molecules.
+:::
+
 ### 6.3 Interactive Example: Charge-Charge Interactions
 
 ```python
@@ -970,15 +978,27 @@ plt.show()
 print("\n" + "="*60)
 print("ELECTROSTATIC ENERGY SCALE:")
 print("="*60)
-print(f"Full charges (+1, -1) at 5 Å:")
-print(f"  U = {k_e * 1 * -1 / 5:.1f} kcal/mol (VERY strong)")
-print(f"\nPartial charges (H₂O: +0.41, -0.82) at 3 Å:")
-print(f"  U = {k_e * 0.41 * -0.82 / 3:.1f} kcal/mol (moderate)")
+print(f"Full ionic charges (+1, -1) at 5 Å:")
+print(f"  U_Coulomb = {k_e * 1 * -1 / 5:.1f} kcal/mol (salt bridge)")
+
+print(f"\nWater H-bond (H···O between molecules):")
+print(f"  Distance: 1.8 Å (intermolecular)")
+print(f"  U_Coulomb = {k_e * 0.41 * -0.82 / 1.8:.1f} kcal/mol (Coulomb only)")
+print(f"  But LJ repulsion (O-H) ≈ +55 kcal/mol at this distance")
+print(f"  → Net H-bond ≈ -5 kcal/mol (Coulomb + LJ)")
+
+print(f"\nLonger range (5 Å between water molecules):")
+print(f"  U_Coulomb = {k_e * 0.41 * -0.82 / 5:.1f} kcal/mol")
+print(f"  LJ contribution ≈ 0 at this distance")
+
 print(f"\nCompare to:")
 print(f"  • Thermal energy (RT): ~0.6 kcal/mol at 300K")
 print(f"  • LJ well depth (Ar): 0.24 kcal/mol")
-print(f"  • Hydrogen bond: ~5 kcal/mol")
-print("\n→ Electrostatics dominate charged/polar systems")
+print(f"  • Covalent bond: ~100 kcal/mol")
+
+print("\n→ Raw Coulomb very strong at short range")
+print("→ LJ repulsion prevents collapse")
+print("→ Net H-bond from Coulomb + LJ balance")
 print("="*60)
 ```
 

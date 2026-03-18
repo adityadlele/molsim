@@ -795,7 +795,7 @@ read_data       combustion.data
 # ========================================
 # CHO force field (hydrocarbons + oxygen)
 pair_style      reax/c NULL safezone 3.0 mincap 150
-pair_coeff      * * ffield.reax.cho C H O
+pair_coeff      * * /apps/spack/anvil/apps/lammps/20210310-gcc-11.2.0-jzfe7x3/share/lammps/potentials/ffield.reax.cho C H O
 
 # ReaxFF requires charge equilibration
 fix             qeq all qeq/reax 1 0.0 10.0 1.0e-6 reax/c
@@ -842,164 +842,227 @@ run             50000          # 50 ps at 2500K (reactions occur)
 write_data      combustion_final.data
 ```
 
-### 3.4 Obtaining the ReaxFF Parameter File
+### 3.4 ReaxFF Parameter File Location
 
 :::{important} ReaxFF Force Field Files
 ReaxFF parameters are system-specific. For CHO (hydrocarbons + oxygen), use:
 
 **File:** `ffield.reax.cho`
 
-**Location on Anvil:**
+**Full path on Anvil:**
 ```bash
-/apps/spack/bell/apps/lammps/20210310-x2lj7m2/share/lammps/potentials/ffield.reax.cho
+/apps/spack/anvil/apps/lammps/20210310-gcc-11.2.0-jzfe7x3/share/lammps/potentials/ffield.reax.cho
 ```
 
-**Copy to your directory:**
-```bash
-cp /apps/spack/bell/apps/lammps/.../ffield.reax.cho .
-```
+**You don't need to copy this file** - the LAMMPS input already references the full path in the `pair_coeff` line.
 
 **Other available ReaxFF files:**
 - `ffield.reax.Fe_O_C_H` - Steel oxidation/corrosion
 - `ffield.reax.Si_O_H` - Silica/glass
 - `ffield.reax.CHON` - Explosives (RDX, HMX)
 
-See full list: `ls /apps/spack/.../potentials/ffield.reax.*`
+See full list:
+```bash
+ls /apps/spack/anvil/apps/lammps/20210310-gcc-11.2.0-jzfe7x3/share/lammps/potentials/ffield.reax.*
+```
 :::
 
-### 3.5 Analysis: Detecting Reactions
+### 3.5 Analysis: Visualizing Reactions in OVITO
 
-Create `analysis.ipynb`:
+After the simulation completes, use OVITO to visually observe the combustion reactions.
 
-**Notebook Cell 1: Species Evolution**
+**Open OVITO on Anvil:**
+1. Go to Open OnDemand → Interactive Apps → OVITO
+2. Launch OVITO session
+
+**Load the trajectory:**
+```
+File → Load File → combustion.lammpstrj
+```
+
+**Recommended OVITO setup for visualizing reactions:**
+
+**Step 1: Color atoms by type**
+```
+Add modification → Coloring → Color coding
+- Property: Particle Type
+- C (type 1): Gray or Black
+- H (type 2): White
+- O (type 3): Red
+```
+
+**Step 2: Adjust atom sizes**
+```
+Particles → Display settings:
+- Radius: 0.4 Å (or adjust to taste)
+- This makes atoms visible but allows seeing through structure
+```
+
+**Step 3: Create bonds to visualize molecules**
+```
+Add modification → Topology → Create bonds
+- Cutoff radius: 1.8 Å
+  (Captures C-C, C-H, C-O, O-H, O-O bonds)
+- Show bonds: Enabled
+- Bond width: 0.15 Å
+```
+
+**Step 4: Play the animation**
+```
+- Use timeline slider at bottom
+- Or click play button
+- Adjust speed with FPS control
+```
+
+**What to observe:**
+
+**Initial state (frame 0):**
+- ✓ Organized CH₄ molecules (1 C + 4 H atoms bonded)
+- ✓ O₂ molecules (2 O atoms bonded)
+- ✓ Clear separation between molecules
+
+**During reaction (middle frames):**
+- ✓ Bonds breaking (CH₄ dissociates, O₂ dissociates)
+- ✓ Atoms mixing rapidly
+- ✓ New bonds forming (C-O, O-H)
+- ✓ Transient species (CO, H₂O forming)
+
+**Final state (last frame):**
+- ✓ CO₂ molecules (1 C + 2 O linear)
+- ✓ H₂O molecules (1 O + 2 H bent)
+- ✓ Possibly some CO, H₂ if incomplete combustion
+- ✓ More organized than middle frames
+
+**Advanced visualization tips:**
+
+**Color by potential energy per atom:**
+```
+Add modification → Coloring → Color coding
+- Property: Potential Energy
+- Gradient: Blue (low) → Red (high)
+- Shows which atoms are in high-energy configurations
+```
+
+**Track coordination number:**
+```
+Add modification → Structure identification → Coordination analysis
+- Cutoff: 1.8 Å
+- Shows how many neighbors each atom has
+- C should have ~3-4 (in CO₂, has 2 O neighbors)
+- O in H₂O should have ~1-2 (1 H neighbor)
+```
+
+**Create snapshots:**
+```
+File → Export File → Image
+- Save frames at: initial, middle, final
+- Compare to see reaction progress
+```
+
+**Export bond statistics:**
+```
+Add modification → Analysis → Bond analysis
+- File → Export File → Table
+- Exports bond lengths and types over time
+```
+
+:::{tip} Understanding What You See
+**CH₄ → CO₂ + H₂O transformation:**
+
+1. **CH₄ breakdown:**
+   - 4 C-H bonds break
+   - C atom freed
+   - H atoms freed
+
+2. **O₂ activation:**
+   - O=O bond breaks
+   - Reactive O atoms freed
+
+3. **Product formation:**
+   - C + 2O → O=C=O (linear CO₂)
+   - 2H + O → H-O-H (bent water)
+
+**What distinguishes CO₂ from other species:**
+- **Linear geometry** (O-C-O angle = 180°)
+- **Two C=O double bonds** (shorter than C-O single)
+- **Symmetric** structure
+
+**What distinguishes H₂O:**
+- **Bent geometry** (H-O-H angle ≈ 104°)
+- **Two O-H bonds**
+- **Persistent structure** once formed
+:::
+
+**Alternative: Quick Python check for atom conservation**
+
+If you want to verify atoms are conserved:
+
+**Create `analysis.ipynb`:**
 
 ```python
 import numpy as np
-import matplotlib.pyplot as plt
-import re
 
-# Parse species output file
-print("Parsing ReaxFF species data...")
+# Count atoms in first and last frame
+def count_atoms_by_type(trajfile):
+    """Count C, H, O atoms in first and last frames"""
+    
+    with open(trajfile, 'r') as f:
+        lines = f.readlines()
+    
+    frames = []
+    i = 0
+    while i < len(lines):
+        if 'ITEM: TIMESTEP' in lines[i]:
+            frame_atoms = {'C': 0, 'H': 0, 'O': 0}
+            
+            # Skip to atoms section
+            while i < len(lines) and 'ITEM: ATOMS' not in lines[i]:
+                i += 1
+            i += 1
+            
+            # Count atoms
+            while i < len(lines) and not lines[i].startswith('ITEM:'):
+                parts = lines[i].split()
+                atom_type = int(parts[2])
+                if atom_type == 1:  # C
+                    frame_atoms['C'] += 1
+                elif atom_type == 2:  # H
+                    frame_atoms['H'] += 1
+                elif atom_type == 3:  # O
+                    frame_atoms['O'] += 1
+                i += 1
+            
+            frames.append(frame_atoms)
+        else:
+            i += 1
+    
+    return frames[0], frames[-1]
 
-with open('species.out', 'r') as f:
-    lines = f.readlines()
+first, last = count_atoms_by_type('combustion.lammpstrj')
 
-# Extract timestep and species counts
-data = {}
-current_step = None
-
-for line in lines:
-    # Look for timestep markers
-    if line.startswith('#'):
-        match = re.search(r'timestep\s+(\d+)', line)
-        if match:
-            current_step = int(match.group(1))
-            if current_step not in data:
-                data[current_step] = {}
-    else:
-        # Parse species lines: "CH4  5"
-        parts = line.split()
-        if len(parts) >= 2 and current_step is not None:
-            species = parts[0]
-            count = int(parts[1])
-            data[current_step][species] = count
-
-# Convert to arrays
-steps = sorted(data.keys())
-species_of_interest = ['CH4', 'O2', 'CO2', 'H2O', 'CO', 'H2']
-
-species_counts = {sp: [] for sp in species_of_interest}
-
-for step in steps:
-    for sp in species_of_interest:
-        species_counts[sp].append(data[step].get(sp, 0))
-
-# Plot
-plt.figure(figsize=(12, 6))
-
-colors = {'CH4': 'blue', 'O2': 'red', 'CO2': 'green', 
-          'H2O': 'cyan', 'CO': 'orange', 'H2': 'purple'}
-
-for sp in species_of_interest:
-    if max(species_counts[sp]) > 0:
-        plt.plot(steps, species_counts[sp], 'o-', linewidth=2, 
-                markersize=4, label=sp, color=colors.get(sp, 'gray'))
-
-plt.xlabel('Timestep', fontsize=12)
-plt.ylabel('Number of Molecules', fontsize=12)
-plt.title('ReaxFF Combustion: Species Evolution', fontsize=14, fontweight='bold')
-plt.legend(fontsize=11, loc='best')
-plt.grid(alpha=0.3)
-plt.tight_layout()
-plt.savefig('species_evolution.png', dpi=150)
-plt.show()
-
-print("\nExpected Reaction:")
-print("  CH₄ + 2O₂ → CO₂ + 2H₂O")
-print("\nObserve:")
-print("  • CH4 and O2 decrease")
-print("  • CO2 and H2O increase")
-print("  • Possible intermediates: CO, H2, radicals")
-```
-
-**Notebook Cell 2: Final Composition**
-
-```python
-# Final state analysis
-final_step = steps[-1]
-final_composition = data[final_step]
-
-print(f"\nFinal Composition (step {final_step}):")
+print("Atom Conservation Check:")
+print("="*40)
+print(f"          C    H    O")
+print(f"Initial:  {first['C']:2d}  {first['H']:2d}  {first['O']:2d}")
+print(f"Final:    {last['C']:2d}  {last['H']:2d}  {last['O']:2d}")
 print("="*40)
 
-total_species = 0
-for species, count in sorted(final_composition.items(), key=lambda x: -x[1]):
-    if count > 0:
-        print(f"  {species:<10} {count:>3}")
-        total_species += count
-
-print("="*40)
-print(f"Total molecules: {total_species}")
-
-# Check stoichiometry
-initial_ch4 = species_counts['CH4'][0]
-initial_o2 = species_counts['O2'][0]
-final_co2 = species_counts['CO2'][-1]
-final_h2o = species_counts['H2O'][-1]
-
-print(f"\nReaction Progress:")
-print(f"  Initial: {initial_ch4} CH₄ + {initial_o2} O₂")
-print(f"  Final:   {final_co2} CO₂ + {final_h2o} H₂O")
-
-# Expected products for complete combustion
-expected_co2 = initial_ch4
-expected_h2o = initial_ch4 * 2
-
-print(f"  Expected: {expected_co2} CO₂ + {expected_h2o} H₂O")
-
-conversion = 100 * (initial_ch4 - species_counts['CH4'][-1]) / initial_ch4
-print(f"\nCH₄ Conversion: {conversion:.1f}%")
-
-if conversion > 80:
-    print("→ Good conversion! Most CH₄ reacted")
-elif conversion > 50:
-    print("→ Partial conversion. Try longer simulation or higher T")
+if first == last:
+    print("✓ Atoms conserved (as expected)")
 else:
-    print("→ Low conversion. Check temperature and mixing")
+    print("✗ ERROR: Atoms not conserved!")
+
+# Calculate expected products from stoichiometry
+initial_ch4 = 10
+initial_o2 = 20
+
+print(f"\nExpected reaction:")
+print(f"  {initial_ch4} CH₄ + {2*initial_ch4} O₂ → {initial_ch4} CO₂ + {2*initial_ch4} H₂O")
+print(f"\nAtom balance:")
+print(f"  C: {initial_ch4} (in {initial_ch4} CO₂)")
+print(f"  H: {4*initial_ch4} (in {2*initial_ch4} H₂O)")  
+print(f"  O: {4*initial_ch4} (in {initial_ch4} CO₂ + {2*initial_ch4} H₂O)")
 ```
-
-:::{note} Understanding ReaxFF Output
-The `species.out` file tracks molecules identified by bond-order analysis:
-- **Timestep headers**: `# Timestep XXXX`
-- **Species lines**: `CH4 5` means 5 methane molecules detected
-- Bond orders > 0.3 are considered "bonds"
-- Species are identified by connectivity, not fixed topology
-
-Common intermediates in combustion:
-- **CO** - carbon monoxide (incomplete combustion)
-- **H2** - hydrogen gas
-- **OH, H, O** - radical species (very short-lived)
-:::
 
 ---
 
@@ -1051,8 +1114,12 @@ Before trusting any advanced potential:
 ### Common LAMMPS Errors
 
 **"ERROR: Cannot open file ffield.reax.cho"**
-- Solution: Copy force field file to working directory
-- Check path: `ls ffield.reax.cho`
+- This error should NOT occur if you used the full path in pair_coeff
+- Verify your LAMMPS input has the complete path:
+  ```
+  pair_coeff * * /apps/spack/anvil/apps/lammps/20210310-gcc-11.2.0-jzfe7x3/share/lammps/potentials/ffield.reax.cho C H O
+  ```
+- Check the file exists: `ls /apps/spack/anvil/apps/lammps/20210310-gcc-11.2.0-jzfe7x3/share/lammps/potentials/ffield.reax.cho`
 
 **"ERROR: Illegal pair_coeff command"**
 - Check atom type count matches data file
