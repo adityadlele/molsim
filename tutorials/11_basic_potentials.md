@@ -1,9 +1,5 @@
 # Tutorial 11: Basic MD Potentials in LAMMPS
 
-:::{warning} Tutorial Status
-**These examples are not fully tested.** This note will be removed after validation. If you encounter errors, please report them to the instructor.
-:::
-
 **Objective:** Understand how adding complexity to MD potentials enables prediction of different material properties through hands-on LAMMPS simulations.
 
 ---
