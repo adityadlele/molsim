@@ -4,6 +4,54 @@
 
 ---
 
+
+:::{warning} File Paths: Running Jupyter from Your Home Directory
+The Python scripts in this tutorial assume you are running Jupyter **from the same directory** as your simulation files. However, most students launch Jupyter from their home directory (`$HOME`).
+
+**If your notebook is not in the same folder as your simulation**, you must add explicit paths to all file operations.
+
+**Option 1: Add a path variable at the top of your notebook**
+
+```python
+# Set this to your simulation directory
+sim_dir = "/anvil/scratch/x-YOUR_USERNAME/tutorial11/part2_nitrogen"
+
+# Then use it for all file operations:
+with open(f'{sim_dir}/n2_system.data', 'w') as f:
+    # ... write file ...
+
+# For reading files:
+with open(f'{sim_dir}/n2.lammpstrj', 'r') as f:
+    # ... read file ...
+```
+
+**Option 2: Change directory at the start of your notebook**
+
+```python
+import os
+os.chdir("/anvil/scratch/x-YOUR_USERNAME/tutorial11/part2_nitrogen")
+
+# Now all file operations use the simulation directory
+# The rest of the script works as written
+```
+
+**Option 3: Navigate to the directory before launching Jupyter**
+
+In the Anvil OnDemand Jupyter launcher, you can set the working directory, or:
+```bash
+cd $SCRATCH/tutorial11/part2_nitrogen
+# Then launch Jupyter from here
+
+
+**Quick Check:** Run this cell to see where your notebook thinks it is:
+```python
+import os
+print("Current directory:", os.getcwd())
+print("Files here:", os.listdir('.'))
+```
+:::
+```
+
 ## File Organization
 
 Before starting, create a well-organized directory structure. On Anvil, in your scratch space:
@@ -603,98 +651,111 @@ import numpy as np
 print("="*60)
 print("BUILDING N2 SYSTEM: ASE + LAMMPS File Format")
 print("="*60)
-print("\nStep 1: Use ASE for molecular geometry")
-print("-" * 60)
 
 # System parameters
 n_molecules = 100
-box_size = 25.0
+box_size = 35.0
+min_dist = 3.5  # Minimum distance between molecule centers (Angstrom)
 
-# Build N2 molecules with ASE (students learn proper tool for geometry)
+np.random.seed(42)  # For reproducibility
+
+# Build N2 molecules with collision detection
 molecules = []
+centers = []
+
+print(f"\nPlacing {n_molecules} N2 molecules with overlap checking...")
+
 for i in range(n_molecules):
-    n2 = molecule('N2')
-    position = np.random.rand(3) * box_size
-    n2.positions += position
-    n2.rotate(np.random.rand() * 360, 'x')
-    n2.rotate(np.random.rand() * 360, 'y')
-    n2.rotate(np.random.rand() * 360, 'z')
-    molecules.append(n2)
+    placed = False
+    attempts = 0
+    max_attempts = 1000
+    
+    while not placed and attempts < max_attempts:
+        # Random center position
+        center = np.random.rand(3) * box_size
+        
+        # Check distance to all existing molecules
+        too_close = False
+        for existing_center in centers:
+            # Minimum image distance (periodic)
+            delta = center - existing_center
+            delta = delta - box_size * np.round(delta / box_size)
+            dist = np.linalg.norm(delta)
+            if dist < min_dist:
+                too_close = True
+                break
+        
+        if not too_close:
+            # Create and place molecule
+            n2 = molecule('N2')
+            
+            # Random rotation
+            n2.rotate(np.random.rand() * 360, 'x')
+            n2.rotate(np.random.rand() * 360, 'y')
+            n2.rotate(np.random.rand() * 360, 'z')
+            
+            # Center molecule at origin, then translate
+            n2.positions -= n2.get_center_of_mass()
+            n2.positions += center
+            
+            # Wrap positions into box
+            n2.positions = n2.positions % box_size
+            
+            molecules.append(n2)
+            centers.append(center)
+            placed = True
+        
+        attempts += 1
+    
+    if not placed:
+        print(f"Warning: Could not place molecule {i+1} after {max_attempts} attempts")
+
+print(f"✓ Successfully placed {len(molecules)} molecules")
 
 # Combine into one system
-system = molecules[0]
+system = molecules[0].copy()
 for mol in molecules[1:]:
     system += mol
 
-# Set the cell explicitly
 system.set_cell([box_size, box_size, box_size])
 system.set_pbc(True)
 
-print(f"✓ ASE created {len(system)} atoms ({n_molecules} molecules)")
-print(f"✓ Correct N-N bond: {np.linalg.norm(molecules[0].positions[0] - molecules[0].positions[1]):.3f} Å")
-print(f"✓ Box: {box_size} × {box_size} × {box_size} Å³")
-
-print("\nStep 2: Write LAMMPS data file")
-print("-" * 60)
-print("LAMMPS has a specific data file format that requires:")
-print("  - Header (counts, box dimensions)")
-print("  - Masses")
-print("  - Atoms (with molecule IDs)")  
-print("  - Bonds")
-print("\nWe'll write this format ourselves to understand it.\n")
-
-# Extract positions from ASE
+# Extract positions
 positions = system.get_positions()
 
 # Write LAMMPS data file
 with open('n2_system.data', 'w') as f:
-    # Header
     f.write('N2 System Built with ASE\n\n')
     f.write(f'{len(positions)} atoms\n')
-    f.write(f'{n_molecules} bonds\n')
-    f.write('0 angles\n')
-    f.write('0 dihedrals\n\n')
+    f.write(f'{len(molecules)} bonds\n\n')
     
     f.write('1 atom types\n')
     f.write('1 bond types\n\n')
     
-    # Box dimensions - write explicitly using box_size
     f.write(f'0.0 {box_size} xlo xhi\n')
     f.write(f'0.0 {box_size} ylo yhi\n')
     f.write(f'0.0 {box_size} zlo zhi\n\n')
     
-    # Masses
     f.write('Masses\n\n')
-    f.write('1 14.007  # Nitrogen\n\n')
+    f.write('1 14.007\n\n')
     
-    # Atoms (full style: atom-ID mol-ID type charge x y z)
     f.write('Atoms  # full\n\n')
     for i in range(len(positions)):
-        mol_id = (i // 2) + 1  # Molecule ID: 1,1,2,2,3,3,...
+        mol_id = (i // 2) + 1
         atom_id = i + 1
         pos = positions[i]
         f.write(f'{atom_id} {mol_id} 1 0.0 {pos[0]:.6f} {pos[1]:.6f} {pos[2]:.6f}\n')
     
-    # Bonds
     f.write('\nBonds\n\n')
-    for i in range(n_molecules):
+    for i in range(len(molecules)):
         bond_id = i + 1
         atom1 = i * 2 + 1
         atom2 = i * 2 + 2
         f.write(f'{bond_id} 1 {atom1} {atom2}\n')
 
-print(f"✓ Wrote n2_system.data with {n_molecules} bonds")
-print(f"✓ Box dimensions: 0-{box_size} Å in each direction")
-print(f"✓ File ready for LAMMPS!\n")
-
-print("="*60)
-print("KEY LEARNING POINTS:")
-print("="*60)
-print("1. ASE is great for molecular geometry (correct bond lengths)")
-print("2. LAMMPS data format is human-readable and follows a pattern")
-print("3. Understanding file formats helps debug simulation problems")
-print("4. Professional workflow often means using multiple tools")
-print("="*60)
+print(f"✓ Wrote n2_system.data")
+print(f"✓ {len(positions)} atoms, {len(molecules)} bonds")
+print(f"✓ Box: {box_size} × {box_size} × {box_size} Å³")
 ```
 
 :::{note} Why We Write LAMMPS Files Manually
