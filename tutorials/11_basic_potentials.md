@@ -927,15 +927,9 @@ OVITO is recommended for visualization, Python for quantitative analysis.
 
 ---
 
-## Part 3: Water - Adding Angles
-
-### 3.1 Why Angles Matter
-
-Water (H₂O) is not linear—the H-O-H angle is 104.5°. This angle is crucial for:
-- Molecular dipole moment
 ## Part 3: Ethane - Adding Dihedrals
 
-### 4.1 Why Dihedrals Matter
+### 3.1 Why Dihedrals Matter
 
 Ethane (H₃C-CH₃) can rotate around the C-C bond. The "staggered" conformation (H atoms far apart) is more stable than "eclipsed" (H atoms aligned).
 
@@ -945,7 +939,7 @@ Ethane (H₃C-CH₃) can rotate around the C-C bond. The "staggered" conformatio
 - ✅ Free energy landscapes
 - ✅ Polymer chain statistics
 
-### 4.2 LAMMPS Input File
+### 3.2 LAMMPS Input File
 
 Create `ethane_dihedral.in`:
 
@@ -1014,7 +1008,7 @@ run             200000                  # 100 ps production
 - Job name: `-J ethane_dihedral`
 - Input file: `lmp < ethane_dihedral.in > ethane_dihedral.log`
 
-### 4.3 Building Ethane
+### 3.3 Building Ethane
 
 **Navigate to ethane directory:**
 ```bash
