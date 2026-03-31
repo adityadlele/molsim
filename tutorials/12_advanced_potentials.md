@@ -4,9 +4,47 @@
 
 ---
 
+## Using Pre-Run Simulations
+
+For this tutorial, we have pre-run all simulations in a shared class directory. You can either:
+
+1. **Use pre-run results** (recommended for in-class work): Copy outputs and run analysis
+2. **Run simulations yourself** (for practice later): Use the LAMMPS input files and geometry builders provided
+
+**Pre-run simulation location:**
+```bash
+/anvil/projects/x-chm250117/class_examples/tutorial12_completed/
+```
+
+**Directory structure:**
+```
+/anvil/projects/x-chm250117/class_examples/tutorial12_completed/
+├── part1_opls_methanol/
+│   ├── methanol.data
+│   ├── methanol.in
+│   ├── methanol.log
+│   ├── methanol.lammpstrj
+│   ├── methanol_rdf.dat
+│   └── methanol_final.data
+├── part2_eam_copper/
+│   ├── copper_melt.in
+│   ├── copper_melt.log
+│   ├── copper_heat.lammpstrj
+│   ├── msd.dat
+│   └── copper_final.data
+└── part3_reaxff_combustion/
+    ├── combustion.data
+    ├── combustion.in
+    ├── combustion.log
+    ├── combustion.lammpstrj
+    └── species.out
+```
+
+---
+
 ## File Organization
 
-Create a well-organized directory structure on Anvil:
+For your own work, create a well-organized directory structure on Anvil:
 
 ```bash
 cd $SCRATCH
@@ -17,25 +55,6 @@ cd tutorial12
 mkdir part1_opls_methanol
 mkdir part2_eam_copper
 mkdir part3_reaxff_combustion
-```
-
-**Recommended structure:**
-```
-tutorial12/
-├── part1_opls_methanol/
-│   ├── build_methanol.ipynb    # Structure builder
-│   ├── methanol.in             # LAMMPS input
-│   ├── submit.sh               # SLURM script
-│   └── analysis.ipynb          # Analysis
-├── part2_eam_copper/
-│   ├── copper_melt.in          # LAMMPS input
-│   ├── submit.sh
-│   └── analysis.ipynb
-└── part3_reaxff_combustion/
-    ├── build_methane_o2.ipynb  # Structure builder
-    ├── combustion.in           # LAMMPS input
-    ├── submit.sh
-    └── analysis.ipynb
 ```
 
 ---
@@ -63,15 +82,13 @@ We'll use **OPLS-AA** (All-Atom) force field.
 
 ### 1.3 Building the System
 
-**Navigate to directory:**
+The data file `methanol.data` is already provided in the shared directory:
+
 ```bash
-cd $SCRATCH/tutorial12/part1_opls_methanol
+ls /anvil/projects/x-chm250117/class_examples/tutorial12_completed/part1_opls_methanol/methanol.data
 ```
 
-**Create notebook: `build_methanol.ipynb`**
-
-**Notebook Cell 1: Build Methanol Liquid Box**
-
+:::{dropdown} Python Script to Build Methanol System (for reference)
 ```python
 import numpy as np
 
@@ -248,10 +265,11 @@ if os.path.exists('methanol.data'):
 else:
     print("✗ ERROR: File not created!")
 ```
+:::
 
 ### 1.4 LAMMPS Input with OPLS Parameters
 
-Create `methanol.in`:
+The LAMMPS input file `methanol.in`:
 
 ```lammps
 # Liquid Methanol - OPLS-AA Force Field
@@ -351,7 +369,14 @@ Re-run the `build_methanol.ipynb` notebook to regenerate `methanol.data` with co
 
 ### 1.5 Analysis: Hydrogen Bonding
 
-Create `analysis.ipynb` after the simulation:
+**Using pre-run results:**
+
+```bash
+ls /anvil/projects/x-chm250117/class_examples/tutorial12_completed/part1_opls_methanol/methanol_rdf.dat
+ls /anvil/projects/x-chm250117/class_examples/tutorial12_completed/part1_opls_methanol/methanol.log
+```
+
+Create `analysis.ipynb`:
 
 **Notebook Cell 1: RDF Analysis**
 
@@ -359,8 +384,34 @@ Create `analysis.ipynb` after the simulation:
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Load O-O RDF (skip 4 header lines)
-data = np.loadtxt('methanol_rdf.dat', skiprows=4)
+# Read the RDF file - it contains multiple output blocks
+# We want the LAST block (final time-averaged data)
+with open('/anvil/projects/x-chm250117/class_examples/tutorial12_completed/part1_opls_methanol/methanol_rdf.dat', 'r') as f:
+    lines = f.readlines()
+
+# Find all timestep markers (lines with just two numbers)
+data_blocks = []
+current_block = []
+
+for line in lines:
+    line = line.strip()
+    if line.startswith('#'):
+        continue
+    
+    parts = line.split()
+    if len(parts) == 2:  # Timestep marker: "timestep num_bins"
+        if current_block:
+            data_blocks.append(current_block)
+        current_block = []
+    elif len(parts) == 4:  # Data line: "bin r g(r) coord"
+        current_block.append([float(x) for x in parts])
+
+# Add last block
+if current_block:
+    data_blocks.append(current_block)
+
+# Use the last (most recent) block
+data = np.array(data_blocks[-1])
 r = data[:, 1]      # Column 2: r (distance)
 g_r = data[:, 2]    # Column 3: g(r)
 
@@ -373,7 +424,7 @@ plt.axvline(x=2.8, color='red', linestyle='--', alpha=0.7,
 plt.xlabel('O-O Distance (Å)', fontsize=12)
 plt.ylabel('g(r)', fontsize=12)
 plt.title('Methanol O-O RDF: Hydrogen Bonding Structure', fontsize=13, fontweight='bold')
-plt.xlim(2, 10)
+plt.xlim(0.5, 10)
 plt.ylim(0, 4)
 plt.legend(fontsize=11)
 plt.grid(alpha=0.3)
@@ -385,6 +436,8 @@ plt.show()
 first_peak_idx = np.argmax(g_r[:60])
 print(f"\nFirst peak at r = {r[first_peak_idx]:.2f} Å")
 print(f"Peak height: {g_r[first_peak_idx]:.2f}")
+print(f"\nNumber of data blocks found: {len(data_blocks)}")
+print(f"Using final block with {len(data)} bins")
 print("\n→ First peak represents H-bonded neighbors")
 print("→ OPLS-AA captures methanol H-bonding structure")
 ```
@@ -415,10 +468,13 @@ The `ave/time` fix averages over multiple frames (100 samples × 10 frequency = 
 **Notebook Cell 2: Density Check**
 
 ```python
-# Extract density from log file
 import re
 
-with open('log.lammps', 'r') as f:
+# Set path to pre-run simulation
+sim_dir = "/anvil/projects/x-chm250117/class_examples/tutorial12_completed/part1_opls_methanol"
+
+# Extract density from log file
+with open(f'{sim_dir}/methanol.log', 'r') as f:
     log_text = f.read()
 
 # Find density values (last 10000 steps)
@@ -484,12 +540,7 @@ We'll create a **spherical copper nanoparticle** (~1000 atoms, ~4 nm diameter) w
 
 ### 2.3 LAMMPS Input File
 
-Navigate to directory:
-```bash
-cd $SCRATCH/tutorial12/part2_eam_copper
-```
-
-Create `copper_melt.in`:
+The LAMMPS input file `copper_melt.in`:
 
 ```lammps
 # Copper Nanoparticle Melting - EAM Potential
@@ -568,7 +619,7 @@ write_data      copper_final.data
 
 ### 2.4 Locating the EAM Potential File
 
-:::{ important} EAM File Location
+:::{important} EAM File Location
 LAMMPS comes with many EAM potential files. On Anvil, they're in:
 ```
 /apps/spack/anvil/apps/lammps/20210310-gcc-11.2.0-jzfe7x3/share/lammps/potentials/
@@ -585,6 +636,13 @@ Common EAM files:
 
 ### 2.5 Analysis: Detecting Melting
 
+**Using pre-run results:**
+
+```bash
+ls /anvil/projects/x-chm250117/class_examples/tutorial12_completed/part2_eam_copper/copper_melt.log
+ls /anvil/projects/x-chm250117/class_examples/tutorial12_completed/part2_eam_copper/copper_heat.lammpstrj
+```
+
 Create `analysis.ipynb`:
 
 **Notebook Cell 1: Temperature and Energy vs. Time**
@@ -592,6 +650,9 @@ Create `analysis.ipynb`:
 ```python
 import numpy as np
 import matplotlib.pyplot as plt
+
+# Set path to pre-run simulation
+sim_dir = "/anvil/projects/x-chm250117/class_examples/tutorial12_completed/part2_eam_copper"
 
 # Parse LAMMPS log file handling variable column counts
 def parse_lammps_log(filename):
@@ -643,14 +704,14 @@ def parse_lammps_log(filename):
     return data_blocks
 
 # Load the data
-blocks = parse_lammps_log('copper_melt.log')
+blocks = parse_lammps_log(f'{sim_dir}/copper_melt.log')
 
 print(f"Found {len(blocks)} thermo output blocks")
 for i, block in enumerate(blocks):
     print(f"  Block {i+1}: {len(block)} rows × {block.shape[1]} columns")
 
-# Block 1 = equilibration (6 cols: Step Temp PE KE TotEng Press)
-# Block 2 = heating (7 cols: Step Temp PE KE TotEng Press MSD)
+# Block 1 = equilibration (5 cols: Step Temp PE KE TotEng)
+# Block 2 = heating (6 cols: Step Temp PE KE TotEng MSD)
 
 if len(blocks) < 2:
     print("Error: Expected 2 thermo blocks (equilibration + heating)")
@@ -659,7 +720,7 @@ else:
     
     temps = heating_data[:, 1]  # Temperature
     pe = heating_data[:, 2]     # Potential Energy  
-    msd = heating_data[:, 6]    # MSD (last column)
+    msd = heating_data[:, 5]    # MSD (last column)
     
     # Create plots
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
@@ -679,7 +740,7 @@ else:
     ax2.axvline(x=1358, color='blue', linestyle='--', linewidth=1.5, 
                 alpha=0.7, label='Expected Tm')
     ax2.set_xlabel('Temperature (K)', fontsize=12)
-    ax2.set_ylabel('MSD (Ų)', fontsize=12)
+    ax2.set_ylabel('MSD (Å²)', fontsize=12)
     ax2.set_title('MSD vs. T (Jump = liquid diffusion)', fontsize=13, fontweight='bold')
     ax2.set_yscale('log')
     ax2.legend()
@@ -700,38 +761,19 @@ else:
         print(f"Depression: {1358 - approx_tm:.0f} K below bulk")
         print("\nNote: Surface melting occurs at lower T than bulk")
     else:
-        print(f"\nNo clear melting detected (MSD max = {msd.max():.1f} Ų)")
+        print(f"\nNo clear melting detected (MSD max = {msd.max():.1f} Å²)")
         print("Try heating to higher temperature")
 ```
 
 **Notebook Cell 2: Coordination Number (Structure Change)**
 
 ```python
-# Load trajectory and analyze coordination
-import MDAnalysis as mda
-
-try:
-    # Specify atom_style for LAMMPS data file (atomic format)
-    u = mda.Universe(
-        'copper_final.data',
-        'copper_heat.lammpstrj',
-        atom_style='id type x y z',
-        format='LAMMPSDUMP'
-    )
-    
-    print(f"Loaded trajectory: {len(u.trajectory)} frames")
-    print("Note: Coordination number was computed by LAMMPS and stored in dump file")
-    print("For proper analysis, parse the c_coord column from the dump file")
-    
-except Exception as e:
-    print(f"MDAnalysis error: {e}")
-    print("\nAlternative: Use OVITO (recommended)")
-
-# Alternative: Direct dump file parsing for coordination
-print("\n" + "="*60)
+print("="*60)
 print("RECOMMENDED: Visualize in OVITO")
 print("="*60)
-print("1. Open: copper_heat.lammpstrj in OVITO")
+print(f"\nTrajectory location:")
+print(f"  /anvil/projects/x-chm250117/class_examples/tutorial12_completed/part2_eam_copper/copper_heat.lammpstrj")
+print("\n1. Open: copper_heat.lammpstrj in OVITO")
 print("2. Add modification → Structure identification → Coordination analysis")
 print("3. Cutoff: 3.2 Å (first neighbor shell)")
 print("4. Plot coordination vs. frame number")
@@ -740,13 +782,10 @@ print("  Solid core: ~12 neighbors (bulk-like)")
 print("  Surface atoms: ~6-9 neighbors (undercoordinated)")
 print("  Liquid: ~10-11 neighbors globally")
 print("  Surface melts first → core melts later")
-```
 
-# Alternative: Direct dump file parsing
 print("\nManual coordination check:")
 print("  Solid FCC Cu: coordination ~12 (bulk), ~9 (surface)")
 print("  Liquid Cu: coordination ~11 (more disordered)")
-print("  Use: grep 'c_coord' copper_heat.lammpstrj")
 ```
 
 :::{tip} Observing Melting in VMD
@@ -772,15 +811,13 @@ At high temperature (4000 K), methane combusts without pre-defined reaction path
 
 ### 3.2 Building the System
 
-Navigate to directory:
+The data file `combustion.data` is already provided in the shared directory:
+
 ```bash
-cd $SCRATCH/tutorial12/part3_reaxff_combustion
+ls /anvil/projects/x-chm250117/class_examples/tutorial12_completed/part3_reaxff_combustion/combustion.data
 ```
 
-Create `build_methane_o2.ipynb`:
-
-**Notebook Cell 1: Build Combustion System**
-
+:::{dropdown} Python Script to Build Combustion System (for reference)
 ```python
 import numpy as np
 
@@ -865,10 +902,11 @@ if os.path.exists('combustion.data'):
     size = os.path.getsize('combustion.data') / 1024
     print(f"✓ File size: {size:.1f} KB")
 ```
+:::
 
 ### 3.3 LAMMPS Input with ReaxFF
 
-Create `combustion.in`:
+The LAMMPS input file `combustion.in`:
 
 ```lammps
 # Methane Combustion with ReaxFF
@@ -959,7 +997,14 @@ ls /apps/spack/anvil/apps/lammps/20210310-gcc-11.2.0-jzfe7x3/share/lammps/potent
 
 ### 3.5 Analysis: Visualizing Reactions in OVITO
 
-After the simulation completes, use OVITO to visually observe the combustion reactions.
+**Using pre-run results:**
+
+```bash
+ls /anvil/projects/x-chm250117/class_examples/tutorial12_completed/part3_reaxff_combustion/combustion.lammpstrj
+ls /anvil/projects/x-chm250117/class_examples/tutorial12_completed/part3_reaxff_combustion/species.out
+```
+
+Use OVITO to visually observe the combustion reactions.
 
 **Open OVITO on Anvil:**
 1. Go to Open OnDemand → Interactive Apps → OVITO
@@ -1023,8 +1068,7 @@ Add modification → Topology → Create bonds
 - ✓ Possibly some CO, H₂ if incomplete combustion
 - ✓ More organized than middle frames
 
-**Advanced visualization tips:**
-
+:::{dropdown} Advanced OVITO Visualization Tips
 **Color by potential energy per atom:**
 ```
 Add modification → Coloring → Color coding
@@ -1055,6 +1099,7 @@ Add modification → Analysis → Bond analysis
 - File → Export File → Table
 - Exports bond lengths and types over time
 ```
+:::
 
 :::{tip} Understanding What You See
 **CH₄ → CO₂ + H₂O transformation:**
@@ -1092,6 +1137,9 @@ If you want to verify atoms are conserved:
 ```python
 import numpy as np
 
+# Set path to pre-run simulation
+sim_dir = "/anvil/projects/x-chm250117/class_examples/tutorial12_completed/part3_reaxff_combustion"
+
 # Count atoms in first and last frame
 def count_atoms_by_type(trajfile):
     """Count C, H, O atoms in first and last frames"""
@@ -1113,7 +1161,7 @@ def count_atoms_by_type(trajfile):
             # Count atoms
             while i < len(lines) and not lines[i].startswith('ITEM:'):
                 parts = lines[i].split()
-                atom_type = int(parts[2])
+                atom_type = int(parts[1])
                 if atom_type == 1:  # C
                     frame_atoms['C'] += 1
                 elif atom_type == 2:  # H
@@ -1128,7 +1176,7 @@ def count_atoms_by_type(trajfile):
     
     return frames[0], frames[-1]
 
-first, last = count_atoms_by_type('combustion.lammpstrj')
+first, last = count_atoms_by_type(f'{sim_dir}/combustion.lammpstrj')
 
 print("Atom Conservation Check:")
 print("="*40)
