@@ -17,6 +17,7 @@ project:
         - file: notes/07_practical_MD.md
         - file: notes/08_classical_potentials.md
         - file: notes/09_advanced_potentials.md
+        - file: notes/10_ml_potentials.md
 
     # Part 2: Hands-on
     - title: Tutorials
@@ -33,6 +34,7 @@ project:
         - file: tutorials/10_Python_for_MD.md
         - file: tutorials/11_basic_potentials.md
         - file: tutorials/12_advanced_potentials.md
+        - file: tutorials/13_ml_potentials.md
   # 2. Ignore Rule: This prevents it from looking in venv ever again
   exclude:
     - venv
