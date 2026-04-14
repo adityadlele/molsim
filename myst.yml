@@ -18,6 +18,10 @@ project:
         - file: notes/08_classical_potentials.md
         - file: notes/09_advanced_potentials.md
         - file: notes/10_ml_potentials.md
+        - file: notes/11_energetics.md
+        - file: notes/12_highthroughput.md
+        - file: notes/13_advanced_topics.md
+        - file: notes/14_applications.md
 
     # Part 2: Hands-on
     - title: Tutorials
@@ -35,6 +39,9 @@ project:
         - file: tutorials/11_basic_potentials.md
         - file: tutorials/12_advanced_potentials.md
         - file: tutorials/13_ml_potentials.md
+        - file: tutorials/14_energetics_practice.md
+        - file: tutorials/15_highthroughput.md
+        - file: tutorials/16_geometry_gen.md
   # 2. Ignore Rule: This prevents it from looking in venv ever again
   exclude:
     - venv
