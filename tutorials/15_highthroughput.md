@@ -47,6 +47,161 @@ This produces two physically meaningful results:
 
 ---
 
+## Part 0: Bash Basics — Before We Touch the Cluster
+
+The LAMMPS workflows later in this tutorial use the same two bash patterns over and over: loops that build directories, and `sed` substitution that fills in template files. This section introduces both in isolation — no simulation software, no SLURM — so the mechanics are clear before they get buried in a larger script.
+
+---
+
+### Example 1: Generating a Structured Directory Tree
+
+Suppose you are planning a study with three materials, each run at four pressures. You want a clean folder for every combination before a single simulation runs. Doing this by hand for 12 folders is tedious; doing it for 120 is not feasible.
+
+The script below builds the tree automatically and drops a `README` into each folder with the parameters baked in.
+
+```bash
+#!/bin/bash
+# build_study_tree.sh
+# Generates a labeled directory tree for a parameter study.
+
+MATERIALS=(copper aluminum iron)
+PRESSURES=(1 10 100 1000)
+
+for mat in "${MATERIALS[@]}"; do
+    for P in "${PRESSURES[@]}"; do
+
+        # Build a descriptive folder name
+        dir="${mat}/P${P}bar"
+        mkdir -p "${dir}"
+
+        # Write a README inside with the run metadata
+        cat > "${dir}/README" << EOF
+Material : ${mat}
+Pressure : ${P} bar
+Status   : pending
+EOF
+
+        echo "Created: ${dir}"
+    done
+done
+
+echo "Done. $(ls -d */P* | wc -l) directories created."
+```
+
+Save this as `build_study_tree.sh` and run it:
+
+```bash
+bash build_study_tree.sh
+```
+
+The output tree looks like this:
+
+```
+copper/
+  P1bar/README
+  P10bar/README
+  P100bar/README
+  P1000bar/README
+aluminum/
+  P1bar/README
+  ...
+```
+
+Check one of the README files to confirm the substitution worked:
+
+```bash
+cat copper/P100bar/README
+```
+
+Expected output:
+```
+Material : copper
+Pressure : 100 bar
+Status   : pending
+```
+
+A few things to notice. `mkdir -p` creates parent directories as needed — `copper/P1bar/` in one command, no errors if the folder already exists. The `cat > file << EOF ... EOF` pattern (a *here-document*) lets you write a multi-line file inline without a separate template file. The `${mat}` and `${P}` variables are substituted before the content is written, so each README is unique.
+
+---
+
+### Example 2: Template Files and `sed` Substitution
+
+A here-document is convenient for small files, but when the file is long (like a LAMMPS input script with dozens of lines), it is cleaner to keep a **template file** separate and use `sed` to swap in values. This is the pattern used in every workflow later in this tutorial.
+
+Start by creating a template. This one mimics a generic simulation config — the same idea applies directly to LAMMPS input files.
+
+```bash
+cat > params_template.conf << 'EOF'
+# Simulation configuration
+# Generated automatically — do not edit by hand
+
+system      = Cu_FCC
+temperature = TEMP_K
+pressure    = PRESS_BAR
+timestep    = 0.002
+run_steps   = 50000
+output_dir  = results/T_TEMP_K_P_PRESS_BAR
+EOF
+```
+
+Now write a loop that generates one filled-in config per temperature and pressure combination:
+
+```bash
+#!/bin/bash
+# fill_templates.sh
+
+TEMPERATURES=(300 600 900 1200)
+PRESSURES=(1 100)
+
+for T in "${TEMPERATURES[@]}"; do
+    for P in "${PRESSURES[@]}"; do
+
+        outfile="config_T${T}_P${P}.conf"
+
+        # Chain two sed calls: replace temperature first, then pressure
+        sed "s/TEMP_K/${T}/g" params_template.conf \
+          | sed "s/PRESS_BAR/${P}/g" \
+          > "${outfile}"
+
+        echo "Wrote: ${outfile}"
+    done
+done
+```
+
+Run it:
+
+```bash
+bash fill_templates.sh
+ls *.conf
+```
+
+Inspect one output:
+
+```bash
+cat config_T600_P100.conf
+```
+
+Expected:
+```
+# Simulation configuration
+# Generated automatically — do not edit by hand
+
+system      = Cu_FCC
+temperature = 600
+pressure    = 100
+timestep    = 0.002
+run_steps   = 50000
+output_dir  = results/T_600_P_100
+```
+
+`sed "s/OLD/NEW/g"` replaces every occurrence of `OLD` with `NEW` in the file. Piping two `sed` calls with `|` applies both substitutions in one pass. The template itself is never modified — you can regenerate all configs from scratch at any time by re-running the script.
+
+:::{tip} Combining both patterns
+In practice, you will combine Examples 1 and 2: the directory loop creates folders, and `sed` fills in the input file for each one. That is exactly what Part 1 and Part 2 of this tutorial do with real LAMMPS inputs. The only addition is `sbatch` at the end of each loop iteration to hand the job to the cluster.
+:::
+
+---
+
 ## Part 1: Python-Driven Workflow
 
 ### Step 1.1: The LAMMPS Template
@@ -67,7 +222,7 @@ create_box  1 box
 create_atoms 1 box
 
 pair_style  eam
-pair_coeff  * * /anvil/projects/x-chm250117/potentials/Cu_u3.eam
+pair_coeff  * * /apps/spack/anvil/apps/lammps/20210310-gcc-11.2.0-jzfe7x3/share/lammps/potentials/Cu_u3.eam
 
 # Equilibration: heat to target temperature
 velocity    all create TEMP_TARGET 42 dist gaussian
@@ -130,8 +285,9 @@ for T in TEMPERATURES:
 #SBATCH --time=00:20:00
 #SBATCH --output=slurm_%j.out
 
-module use /anvil/projects/x-chm250117/etc/modules
-module load lammps
+module purge
+module load gcc/11.2.0 openmpi/4.0.6
+module load lammps/20210310
 
 mpirun -np 4 lmp -in lammps.in > lammps.out
 echo "Job complete: T={T} K"
@@ -344,8 +500,9 @@ cd "${RUN_DIR}"
 sed "s/TEMP_TARGET/${T}/g" ../../lammps_nvt_template.in > lammps.in
 
 # ── Run simulation ────────────────────────────────────────────────
-module use /anvil/projects/x-chm250117/etc/modules
-module load lammps
+module purge
+module load gcc/11.2.0 openmpi/4.0.6
+module load lammps/20210310
 
 mpirun -np 4 lmp -in lammps.in > lammps.out
 echo "T=${T} completed at $(date)"
