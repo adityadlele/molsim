@@ -14,11 +14,27 @@
 
 ### Working Directory
 
+All files generated in this tutorial — directories, input scripts, SLURM scripts, and simulation outputs — should live in your **scratch space**, not your home directory. Scratch has far more storage and is the correct location for simulation data.
+
 ```bash
 cd $SCRATCH
 mkdir -p tutorial15
 cd tutorial15
 ```
+
+:::{warning} Jupyter notebooks and working directories
+If you open a Jupyter notebook from the Anvil OnDemand launcher, it starts in your **home directory** (`/home/x-yourusername`), not in scratch. This means relative paths like `Path("temperature_sweep")` or `Path("lammps_nvt_template.in")` will resolve to your home directory, not to the tutorial15 folder you just created.
+
+To keep everything in one place, run this at the top of your notebook before any other cells:
+
+```python
+import os
+os.chdir(f"/anvil/scratch/{os.environ['USER']}/tutorial15")
+print(os.getcwd())   # confirm you are in the right place
+```
+
+Alternatively, navigate to `$SCRATCH/tutorial15` in the Jupyter file browser and open (or create) your notebook from there.
+:::
 
 ### Pre-Run Outputs
 
@@ -91,6 +107,7 @@ echo "Done. $(ls -d */P* | wc -l) directories created."
 Save this as `build_study_tree.sh` and run it:
 
 ```bash
+chmod +x build_study_tree.sh
 bash build_study_tree.sh
 ```
 
@@ -171,6 +188,7 @@ done
 Run it:
 
 ```bash
+chmod +x fill_templates.sh
 bash fill_templates.sh
 ls *.conf
 ```
@@ -513,6 +531,9 @@ echo "T=${T} completed at $(date)"
 ```bash
 # Create log directory
 mkdir -p logs
+
+# Make the script executable
+chmod +x array_sweep.sh
 
 # Submit the entire sweep in one command
 sbatch array_sweep.sh
